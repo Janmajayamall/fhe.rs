@@ -11,6 +11,7 @@ use itertools::{izip, Itertools};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
+use std::simd::{LaneCount, Simd, SimdPartialOrd, SupportedLaneCount};
 
 /// Structure encapsulating an integer modulus up to 62 bits.
 #[derive(Debug, Clone, PartialEq)]
@@ -711,6 +712,77 @@ impl Modulus {
 	pub fn deserialize_vec(&self, b: &[u8]) -> Vec<u64> {
 		let p_nbits = 64 - (self.p - 1).leading_zeros() as usize;
 		transcode_from_bytes(b, p_nbits)
+	}
+
+	pub fn reduce1_simd<const LANES: usize>(
+		a: Simd<u64, LANES>,
+		p: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let a_minus_p = a - p;
+		a.simd_gt(p).select(a_minus_p, a)
+	}
+
+	pub fn add_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let p = Simd::<u64, LANES>::from_array([self.p; LANES]);
+		Self::reduce1_simd(a + b, p)
+	}
+
+	pub fn sub_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let p = Simd::<u64, LANES>::from_array([self.p; LANES]);
+		Self::reduce1_simd(a + p - b, p)
+	}
+
+	pub fn add_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let (a0, a1, a2) = a.as_simd_mut();
+		let (b0, b1, b2) = b.as_simd();
+
+		if a0.len() == b0.len() && a1.len() == b1.len() && a2.len() == b2.len() {
+			self.add_vec(a0, b0);
+			izip!(a1, b1).for_each(|(a, b)| {
+				*a = self.add_simd(*a, *b);
+			});
+			self.add_vec(a2, b2);
+		} else {
+			self.add_vec(a, b);
+		}
+	}
+
+	pub fn sub_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let (a0, a1, a2) = a.as_simd_mut();
+		let (b0, b1, b2) = b.as_simd();
+
+		if a0.len() == b0.len() && a1.len() == b1.len() && a2.len() == b2.len() {
+			self.sub_vec(a0, b0);
+			izip!(a1, b1).for_each(|(a, b)| {
+				*a = self.sub_simd(*a, *b);
+			});
+			self.sub_vec(a2, b2);
+		} else {
+			self.sub_vec(a, b);
+		}
 	}
 }
 

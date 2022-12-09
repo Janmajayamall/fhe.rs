@@ -11,7 +11,10 @@ use itertools::{izip, Itertools};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
-use std::simd::{LaneCount, Simd, SimdPartialOrd, SupportedLaneCount};
+use std::{
+	ops::Mul,
+	simd::{LaneCount, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount},
+};
 
 /// Structure encapsulating an integer modulus up to 62 bits.
 #[derive(Debug, Clone, PartialEq)]
@@ -722,7 +725,7 @@ impl Modulus {
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		let a_minus_p = a - p;
-		a.simd_gt(p).select(a_minus_p, a)
+		a.simd_min(a_minus_p)
 	}
 
 	pub fn add_simd<const LANES: usize>(
@@ -783,6 +786,13 @@ impl Modulus {
 		} else {
 			self.sub_vec(a, b);
 		}
+	}
+
+	pub fn mulhi_simd<const LANES: usize>(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>)
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let f = a.mul(b);
 	}
 }
 

@@ -1,5 +1,9 @@
+#![feature(portable_simd)]
+use std::iter;
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fhe_math::zq::Modulus;
+use itertools::izip;
 use rand::thread_rng;
 
 pub fn zq_benchmark(c: &mut Criterion) {
@@ -9,7 +13,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 	let p = 4611686018326724609;
 	let mut rng = thread_rng();
 
-	for vector_size in [1024usize, 4096].iter() {
+	for vector_size in [1024usize, 4096, 1 << 15].iter() {
 		let q = Modulus::new(p).unwrap();
 		let mut a = q.random_vec(*vector_size, &mut rng);
 		let c = q.random_vec(*vector_size, &mut rng);
@@ -24,8 +28,26 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			b.iter(|| q.add_vec_vt(&mut a, &c));
 		});
 
+		group.bench_function(BenchmarkId::new("add_vec_simd", vector_size), |b| {
+			b.iter(|| q.add_vec_simd::<8>(&mut a, &c))
+		});
+
+		let (a0, a1, a2) = a.as_simd::<8>();
+		let (c0, c1, c2) = c.as_simd::<8>();
+		group.bench_function(BenchmarkId::new("add_simd", vector_size), |b| {
+			b.iter(|| {
+				izip!(a1, c1).for_each(|(a, c)| {
+					q.add_simd::<8>(*a, *c);
+				});
+			})
+		});
+
 		group.bench_function(BenchmarkId::new("sub_vec", vector_size), |b| {
 			b.iter(|| q.sub_vec(&mut a, &c));
+		});
+
+		group.bench_function(BenchmarkId::new("sub_vec_simd", vector_size), |b| {
+			b.iter(|| q.sub_vec_simd::<8>(&mut a, &c))
 		});
 
 		group.bench_function(BenchmarkId::new("neg_vec", vector_size), |b| {

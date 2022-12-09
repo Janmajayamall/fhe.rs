@@ -58,6 +58,7 @@ pub fn generate_prime(num_bits: usize, modulo: u64, upper_bound: u64) -> Option<
 
 #[cfg(test)]
 mod tests {
+
 	use super::generate_prime;
 	use fhe_util::catch_unwind;
 

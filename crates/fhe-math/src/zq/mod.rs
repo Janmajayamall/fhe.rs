@@ -728,6 +728,16 @@ impl Modulus {
 		a.simd_min(a_minus_p)
 	}
 
+	pub fn reduce_opt_128_simd<const LANES: usize>(
+		a_hi: Simd<u64, LANES>,
+		a_lo: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		todo!()
+	}
+
 	pub fn add_simd<const LANES: usize>(
 		&self,
 		a: Simd<u64, LANES>,
@@ -798,11 +808,14 @@ impl Modulus {
 
 #[cfg(test)]
 mod tests {
+	use super::primes::generate_prime;
 	use super::{primes, Modulus};
 	use fhe_util::catch_unwind;
 	use itertools::{izip, Itertools};
 	use proptest::collection::vec as prop_vec;
 	use proptest::prelude::{any, BoxedStrategy, Just, Strategy};
+	use rand::distributions::Uniform;
+	use rand::prelude::Distribution;
 	use rand::{thread_rng, RngCore};
 
 	// Utility functions for the proptests.
@@ -1166,5 +1179,38 @@ mod tests {
 				}
 			}
 		}
+	}
+
+	#[test]
+	fn reduce_opt_128_simd_simulate() {
+		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
+		let q_mod = Modulus::new(p).unwrap();
+
+		let mut rng = thread_rng();
+		let a = Uniform::new(0u128, p as u128 * p as u128).sample(&mut rng);
+
+		let a_hi = (a >> 64) as u64;
+		let a_lo = a as u64;
+
+		let low_mask = 4294967295u64;
+
+		// calc q
+		let qt_hi = ((q_mod.barrett_lo as u128 * a_hi as u128) >> 64) as u64;
+		let qt_lo = (q_mod.barrett_lo as u128 * a_hi as u128) as u64;
+
+		// a_lo << 2^s0
+		let qb_hi = (a_hi << q_mod.leading_zeros) + (a_lo >> (64 - q_mod.leading_zeros));
+		let qb_lo = a_lo << (q_mod.leading_zeros);
+
+		// calc c0
+		let tmp = (qb_lo) + (low_mask & qt_lo);
+		let c0 = ((tmp >> 32) + (qt_lo >> 32)) >> 32;
+
+		let tmp = qt_hi + c0;
+		let q = qb_hi + tmp;
+
+		let res = (a_lo).wrapping_sub(q.wrapping_mul(p));
+
+		assert_eq!(res, (a % p as u128) as u64);
 	}
 }

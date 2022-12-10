@@ -12,8 +12,8 @@ use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
 use std::{
-	ops::Mul,
-	simd::{LaneCount, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount},
+	ops::{BitAnd, Mul, Shl, Shr},
+	simd::{LaneCount, Simd, SimdOrd, SupportedLaneCount},
 };
 
 /// Structure encapsulating an integer modulus up to 62 bits.
@@ -729,13 +729,83 @@ impl Modulus {
 	}
 
 	pub fn reduce_opt_128_simd<const LANES: usize>(
+		&self,
 		a_hi: Simd<u64, LANES>,
 		a_lo: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		todo!()
+		let barret_lo = Simd::from_array([self.barrett_lo; LANES]);
+		// 1 << 32 - 1
+		let low_mask = Simd::from_array([4294967295u64; LANES]);
+		let shift_32 = Simd::from_array([32u64; LANES]);
+
+		// qt = barret_lo * a_hi
+		let qt_hi = self.mulhi_simd(barret_lo, a_hi);
+		let qt_lo = barret_lo * a_hi;
+
+		// qb = a << 2^s0
+		// let tmp_mask = Simd::from_array([  ;LANES]);
+		let left_shift = Simd::from_array([self.leading_zeros as u64; LANES]);
+		let qb_hi = a_hi.shl(left_shift)
+			+ a_lo.shr(Simd::from_array([64 - self.leading_zeros as u64; LANES]));
+		let qb_lo = a_lo.shl(left_shift);
+
+		// q = qt + qb
+		let qt_lo_lo = qt_lo.bitand(low_mask);
+		let qb_lo_hi_c0 = qb_lo + qt_lo_lo;
+		let qb_hi_c0 = qb_lo_hi_c0.shr(shift_32);
+		let qt_lo_hi = qt_lo.shr(shift_32);
+		let qr_lo_hi = qb_hi_c0 + qt_lo_hi;
+		let c = qr_lo_hi.shr(shift_32);
+
+		// qr_hi = c + qt_hi + qb_hi
+		let qr_hi = c + qt_hi + qb_hi;
+
+		// r = a_lo - qr_hi * p
+		let r = a_lo - qr_hi * Simd::from_array([self.p; LANES]);
+
+		r
+	}
+
+	pub fn mulhi_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let half_size = Simd::from_array([32; LANES]);
+		let low_mask = Simd::from_array([4294967295u64; LANES]);
+
+		let a_hi = a.shr(half_size);
+		let a_lo = a.bitand(low_mask);
+		let b_hi = b.shr(half_size);
+		let b_lo = b.bitand(low_mask);
+
+		// c = a * b
+		let c_lo_lo = a_lo * b_lo;
+		let c_hi_lo = a_hi * b_lo;
+		let c_lo_hi = a_lo * b_hi;
+		let c_hi_hi = a_hi * b_hi;
+
+		// Calc c_hi
+
+		// we don't need lower 32 bits of c_lo_lo for c_hi
+		let c_lo_lo_shift = c_lo_lo.shr(half_size);
+
+		let s_mid = c_hi_lo + c_lo_lo_shift;
+		let s_low = s_mid.bitand(low_mask);
+		let s_mid = s_mid.shr(half_size);
+		let s_mid2 = c_lo_hi + s_low;
+		let s_mid2 = s_mid2.shr(half_size);
+
+		let mut c_hi = c_hi_hi + s_mid2;
+		c_hi += s_mid;
+
+		c_hi
 	}
 
 	pub fn add_simd<const LANES: usize>(
@@ -796,13 +866,6 @@ impl Modulus {
 		} else {
 			self.sub_vec(a, b);
 		}
-	}
-
-	pub fn mulhi_simd<const LANES: usize>(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>)
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let f = a.mul(b);
 	}
 }
 
@@ -1202,11 +1265,11 @@ mod tests {
 		let qb_hi = (a_hi << q_mod.leading_zeros) + (a_lo >> (64 - q_mod.leading_zeros));
 		let qb_lo = a_lo << (q_mod.leading_zeros);
 
-		// calc c0
+		// calc c
 		let tmp = (qb_lo) + (low_mask & qt_lo);
-		let c0 = ((tmp >> 32) + (qt_lo >> 32)) >> 32;
+		let c = ((tmp >> 32) + (qt_lo >> 32)) >> 32;
 
-		let tmp = qt_hi + c0;
+		let tmp = qt_hi + c;
 		let q = qb_hi + tmp;
 
 		let res = (a_lo).wrapping_sub(q.wrapping_mul(p));

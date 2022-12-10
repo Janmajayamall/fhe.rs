@@ -728,7 +728,7 @@ impl Modulus {
 		a.simd_min(a_minus_p)
 	}
 
-	pub fn reduce_opt_128_simd<const LANES: usize>(
+	pub fn lazy_reduce_opt_u128_simd<const LANES: usize>(
 		&self,
 		a_hi: Simd<u64, LANES>,
 		a_lo: Simd<u64, LANES>,
@@ -767,6 +767,18 @@ impl Modulus {
 		let r = a_lo - qr_hi * Simd::from_array([self.p; LANES]);
 
 		r
+	}
+
+	pub fn reduce_opt_u128_simd<const LANES: usize>(
+		&self,
+		a_hi: Simd<u64, LANES>,
+		a_lo: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let a = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
+		Self::reduce1_simd(a, Simd::from_array([self.p; LANES]))
 	}
 
 	pub fn mulhi_simd<const LANES: usize>(
@@ -871,6 +883,8 @@ impl Modulus {
 
 #[cfg(test)]
 mod tests {
+	use std::simd::Simd;
+
 	use super::primes::generate_prime;
 	use super::{primes, Modulus};
 	use fhe_util::catch_unwind;
@@ -1242,6 +1256,44 @@ mod tests {
 				}
 			}
 		}
+	}
+
+	#[test]
+	fn reduce_u128_simd_works() {
+		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
+		let q_mod = Modulus::new(p).unwrap();
+
+		const LANES: usize = 8;
+
+		let rng = thread_rng();
+		let a = Uniform::new(0u128, p as u128 * p as u128)
+			.sample_iter(rng)
+			.take(LANES)
+			.collect_vec();
+
+		let tmp: [u64; LANES] = a
+			.iter()
+			.map(|v| (v >> 64) as u64)
+			.collect_vec()
+			.try_into()
+			.unwrap();
+		let a_hi = Simd::from_array(tmp);
+		let tmp = a
+			.iter()
+			.map(|v| (v & ((1 << 64) - 1)) as u64)
+			.collect_vec()
+			.try_into()
+			.unwrap();
+		let a_lo = Simd::from_array(tmp);
+
+		let reduced_simd = q_mod
+			.reduce_opt_u128_simd::<LANES>(a_hi, a_lo)
+			.to_array()
+			.to_vec();
+
+		let reduced = a.iter().map(|v| q_mod.reduce_opt_u128(*v)).collect_vec();
+
+		assert_eq!(reduced_simd, reduced);
 	}
 
 	#[test]

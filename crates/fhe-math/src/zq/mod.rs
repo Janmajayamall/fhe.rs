@@ -22,8 +22,8 @@ pub struct Modulus {
 	p: u64,
 	nbits: usize,
 	barrett_hi: u64,
-	barrett_lo: u64,
-	leading_zeros: u32,
+	pub barrett_lo: u64,
+	pub leading_zeros: u32,
 	pub(crate) supports_opt: bool,
 	distribution: Uniform<u64>,
 }
@@ -732,22 +732,20 @@ impl Modulus {
 		&self,
 		a_hi: Simd<u64, LANES>,
 		a_lo: Simd<u64, LANES>,
+		barret_lo: Simd<u64, LANES>,
+		low_mask: Simd<u64, LANES>,
+		shift_32: Simd<u64, LANES>,
+		left_shift: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let barret_lo = Simd::from_array([self.barrett_lo; LANES]);
-		// 1 << 32 - 1
-		let low_mask = Simd::from_array([4294967295u64; LANES]);
-		let shift_32 = Simd::from_array([32u64; LANES]);
-
 		// qt = barret_lo * a_hi
 		let qt_hi = self.mulhi_simd(barret_lo, a_hi);
 		let qt_lo = barret_lo * a_hi;
 
 		// qb = a << 2^s0
 		// let tmp_mask = Simd::from_array([  ;LANES]);
-		let left_shift = Simd::from_array([self.leading_zeros as u64; LANES]);
 		let qb_hi = a_hi.shl(left_shift)
 			+ a_lo.shr(Simd::from_array([64 - self.leading_zeros as u64; LANES]));
 		let qb_lo = a_lo.shl(left_shift);
@@ -773,11 +771,16 @@ impl Modulus {
 		&self,
 		a_hi: Simd<u64, LANES>,
 		a_lo: Simd<u64, LANES>,
+		barret_lo: Simd<u64, LANES>,
+		low_mask: Simd<u64, LANES>,
+		shift_32: Simd<u64, LANES>,
+		left_shift: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let a = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
+		let a =
+			self.lazy_reduce_opt_u128_simd(a_hi, a_lo, barret_lo, low_mask, shift_32, left_shift);
 		Self::reduce1_simd(a, Simd::from_array([self.p; LANES]))
 	}
 
@@ -1286,12 +1289,20 @@ mod tests {
 			.unwrap();
 		let a_lo = Simd::from_array(tmp);
 
+		let barret_lo = Simd::from_array([q_mod.barrett_lo; LANES]);
+		let low_mask = Simd::from_array([4294967295u64; LANES]);
+		let shift_32 = Simd::from_array([32u64; LANES]);
+		let left_shift = Simd::from_array([q_mod.leading_zeros as u64; LANES]);
+		let mut now = std::time::Instant::now();
 		let reduced_simd = q_mod
-			.reduce_opt_u128_simd::<LANES>(a_hi, a_lo)
+			.reduce_opt_u128_simd::<LANES>(a_hi, a_lo, barret_lo, low_mask, shift_32, left_shift)
 			.to_array()
 			.to_vec();
+		println!("SIMD took: {:?}", now.elapsed());
 
+		now = std::time::Instant::now();
 		let reduced = a.iter().map(|v| q_mod.reduce_opt_u128(*v)).collect_vec();
+		println!("Normal took: {:?}", now.elapsed());
 
 		assert_eq!(reduced_simd, reduced);
 	}

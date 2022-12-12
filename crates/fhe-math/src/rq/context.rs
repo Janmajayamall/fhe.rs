@@ -4,9 +4,11 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::{
 	rns::RnsContext,
-	zq::{ntt::NttOperator, Modulus},
+	zq::{ntt::NttOperator, Modulus as Modulus2},
 	Error, Result,
 };
+
+type Modulus = Modulus2<8>;
 
 /// Struct that holds the context associated with elements in rq.
 #[derive(Default, Clone, PartialEq, Eq)]

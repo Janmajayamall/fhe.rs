@@ -1,9 +1,11 @@
 //! Number-Theoretic Transform in ZZ_q.
 
-use super::Modulus;
+use super::Modulus as Modulus2;
 use fhe_util::is_prime;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+
+type Modulus = Modulus2<8>;
 
 /// Returns whether a modulus p is prime and supports the Number Theoretic
 /// Transform of size n.
@@ -404,7 +406,9 @@ mod tests {
 	use rand::thread_rng;
 
 	use super::{supports_ntt, NttOperator};
-	use crate::zq::Modulus;
+	use crate::zq::Modulus as Modulus2;
+
+	type Modulus = Modulus2<8>;
 
 	#[test]
 	fn constructor() {

@@ -580,7 +580,7 @@ impl Zeroize for Poly {
 #[cfg(test)]
 mod tests {
 	use super::{switcher::Switcher, Context, Poly, Representation};
-	use crate::{rq::SubstitutionExponent, zq::Modulus};
+	use crate::{rq::SubstitutionExponent, zq::Modulus as Modulus2};
 	use fhe_util::variance;
 	use itertools::Itertools;
 	use num_bigint::BigUint;
@@ -588,6 +588,8 @@ mod tests {
 	use rand::{thread_rng, Rng, SeedableRng};
 	use rand_chacha::ChaCha8Rng;
 	use std::{error::Error, sync::Arc};
+
+	type Modulus = Modulus2<8>;
 
 	// Moduli to be used in tests.
 	const MODULI: &[u64; 5] = &[

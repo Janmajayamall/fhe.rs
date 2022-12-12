@@ -18,26 +18,48 @@ use std::{
 
 /// Structure encapsulating an integer modulus up to 62 bits.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Modulus {
+pub struct Modulus<const LANES: usize>
+where
+	LaneCount<LANES>: SupportedLaneCount,
+{
 	p: u64,
 	nbits: usize,
 	barrett_hi: u64,
-	pub barrett_lo: u64,
-	pub leading_zeros: u32,
+	barrett_lo: u64,
+	leading_zeros: u32,
 	pub(crate) supports_opt: bool,
 	distribution: Uniform<u64>,
+
+	//simd
+	p_simd: Simd<u64, LANES>,
+	barret_lo_simd: Simd<u64, LANES>,
+	low_mask: Simd<u64, LANES>,
+	shift_32: Simd<u64, LANES>,
+	left_shift: Simd<u64, LANES>,
+	right_shift: Simd<u64, LANES>,
 }
 
 // We need to declare Eq manually because of the `Uniform` member.
-impl Eq for Modulus {}
+impl<const LANES: usize> Eq for Modulus<LANES> where LaneCount<LANES>: SupportedLaneCount {}
 
-impl Modulus {
+impl<const LANES: usize> Modulus<LANES>
+where
+	LaneCount<LANES>: SupportedLaneCount,
+{
 	/// Create a modulus from an integer of at most 62 bits.
 	pub fn new(p: u64) -> Result<Self> {
 		if p < 2 || (p >> 62) != 0 {
 			Err(Error::InvalidModulus(p))
 		} else {
 			let barrett = ((BigUint::from(1u64) << 128usize) / p).to_u128().unwrap(); // 2^128 / p
+
+			let p_simd = Simd::from_array([p; LANES]);
+			let barret_lo_simd = Simd::from_array([barrett as u64; LANES]);
+			let low_mask = Simd::from_array([4294967295u64; LANES]);
+			let shift_32 = Simd::from_array([32u64; LANES]);
+			let left_shift = Simd::from_array([p.leading_zeros() as u64; LANES]);
+			let right_shift = Simd::from_array([64 - p.leading_zeros() as u64; LANES]);
+
 			Ok(Self {
 				p,
 				nbits: 64 - p.leading_zeros() as usize,
@@ -46,6 +68,13 @@ impl Modulus {
 				leading_zeros: p.leading_zeros(),
 				supports_opt: primes::supports_opt(p),
 				distribution: Uniform::from(0..p),
+
+				p_simd,
+				barret_lo_simd,
+				low_mask,
+				shift_32,
+				left_shift,
+				right_shift,
 			})
 		}
 	}
@@ -557,6 +586,13 @@ impl Modulus {
 		Self::reduce1(self.lazy_reduce_opt_u128(a), self.p)
 	}
 
+	pub fn reduce_opt_u128_vec(&self, a: &[u128]) -> Vec<u64> {
+		debug_assert!(self.supports_opt);
+		izip!(a)
+			.map(|v| Self::reduce1(self.lazy_reduce_opt_u128(*v), self.p))
+			.collect_vec()
+	}
+
 	/// Optimized modular reduction of a u128 in constant time.
 	///
 	/// # Safety
@@ -717,10 +753,7 @@ impl Modulus {
 		transcode_from_bytes(b, p_nbits)
 	}
 
-	pub fn reduce1_simd<const LANES: usize>(
-		a: Simd<u64, LANES>,
-		p: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
+	pub fn reduce1_simd(a: Simd<u64, LANES>, p: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -728,77 +761,72 @@ impl Modulus {
 		a.simd_min(a_minus_p)
 	}
 
-	pub fn lazy_reduce_opt_u128_simd<const LANES: usize>(
+	pub fn lazy_reduce_opt_u128_simd(
 		&self,
 		a_hi: Simd<u64, LANES>,
 		a_lo: Simd<u64, LANES>,
-		barret_lo: Simd<u64, LANES>,
-		low_mask: Simd<u64, LANES>,
-		shift_32: Simd<u64, LANES>,
-		left_shift: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		// qt = barret_lo * a_hi
-		let qt_hi = self.mulhi_simd(barret_lo, a_hi);
-		let qt_lo = barret_lo * a_hi;
+		let qt_hi = self.mulhi_simd(self.barret_lo_simd, a_hi);
+		let qt_lo = self.barret_lo_simd * a_hi;
 
 		// qb = a << 2^s0
-		// let tmp_mask = Simd::from_array([  ;LANES]);
-		let qb_hi = a_hi.shl(left_shift)
-			+ a_lo.shr(Simd::from_array([64 - self.leading_zeros as u64; LANES]));
-		let qb_lo = a_lo.shl(left_shift);
+		let qb_hi = a_hi.shl(self.left_shift) + a_lo.shr(self.right_shift);
+		let qb_lo = a_lo.shl(self.left_shift);
 
 		// q = qt + qb
-		let qt_lo_lo = qt_lo.bitand(low_mask);
+		let qt_lo_lo = qt_lo.bitand(self.low_mask);
 		let qb_lo_hi_c0 = qb_lo + qt_lo_lo;
-		let qb_hi_c0 = qb_lo_hi_c0.shr(shift_32);
-		let qt_lo_hi = qt_lo.shr(shift_32);
+		let qb_hi_c0 = qb_lo_hi_c0.shr(self.shift_32);
+		let qt_lo_hi = qt_lo.shr(self.shift_32);
 		let qr_lo_hi = qb_hi_c0 + qt_lo_hi;
-		let c = qr_lo_hi.shr(shift_32);
+		let c = qr_lo_hi.shr(self.shift_32);
 
 		// qr_hi = c + qt_hi + qb_hi
 		let qr_hi = c + qt_hi + qb_hi;
 
 		// r = a_lo - qr_hi * p
-		let r = a_lo - qr_hi * Simd::from_array([self.p; LANES]);
+		let r = a_lo - qr_hi * self.p_simd;
 
 		r
 	}
 
-	pub fn reduce_opt_u128_simd<const LANES: usize>(
+	pub fn reduce_opt_u128_simd(
 		&self,
 		a_hi: Simd<u64, LANES>,
 		a_lo: Simd<u64, LANES>,
-		barret_lo: Simd<u64, LANES>,
-		low_mask: Simd<u64, LANES>,
-		shift_32: Simd<u64, LANES>,
-		left_shift: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let a =
-			self.lazy_reduce_opt_u128_simd(a_hi, a_lo, barret_lo, low_mask, shift_32, left_shift);
-		Self::reduce1_simd(a, Simd::from_array([self.p; LANES]))
+		let a = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
+		Self::reduce1_simd(a, self.p_simd)
 	}
 
-	pub fn mulhi_simd<const LANES: usize>(
+	pub fn reduce_opt_u128_simd_vec(
 		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
+		a_hi: &[Simd<u64, LANES>],
+		a_lo: &[Simd<u64, LANES>],
+	) -> Vec<Simd<u64, LANES>>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let half_size = Simd::from_array([32; LANES]);
-		let low_mask = Simd::from_array([4294967295u64; LANES]);
+		izip!(a_hi, a_lo)
+			.map(|(h, l)| self.reduce_opt_u128_simd(*h, *l))
+			.collect()
+	}
 
-		let a_hi = a.shr(half_size);
-		let a_lo = a.bitand(low_mask);
-		let b_hi = b.shr(half_size);
-		let b_lo = b.bitand(low_mask);
+	pub fn mulhi_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let a_hi = a.shr(self.shift_32);
+		let a_lo = a.bitand(self.low_mask);
+		let b_hi = b.shr(self.shift_32);
+		let b_lo = b.bitand(self.low_mask);
 
 		// c = a * b
 		let c_lo_lo = a_lo * b_lo;
@@ -809,13 +837,13 @@ impl Modulus {
 		// Calc c_hi
 
 		// we don't need lower 32 bits of c_lo_lo for c_hi
-		let c_lo_lo_shift = c_lo_lo.shr(half_size);
+		let c_lo_lo_shift = c_lo_lo.shr(self.shift_32);
 
 		let s_mid = c_hi_lo + c_lo_lo_shift;
-		let s_low = s_mid.bitand(low_mask);
-		let s_mid = s_mid.shr(half_size);
+		let s_low = s_mid.bitand(self.low_mask);
+		let s_mid = s_mid.shr(self.shift_32);
 		let s_mid2 = c_lo_hi + s_low;
-		let s_mid2 = s_mid2.shr(half_size);
+		let s_mid2 = s_mid2.shr(self.shift_32);
 
 		let mut c_hi = c_hi_hi + s_mid2;
 		c_hi += s_mid;
@@ -823,11 +851,7 @@ impl Modulus {
 		c_hi
 	}
 
-	pub fn add_simd<const LANES: usize>(
-		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
+	pub fn add_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -835,11 +859,7 @@ impl Modulus {
 		Self::reduce1_simd(a + b, p)
 	}
 
-	pub fn sub_simd<const LANES: usize>(
-		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
+	pub fn sub_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -847,7 +867,7 @@ impl Modulus {
 		Self::reduce1_simd(a + p - b, p)
 	}
 
-	pub fn add_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -865,7 +885,17 @@ impl Modulus {
 		}
 	}
 
-	pub fn sub_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	pub fn add_simd_vec(&self, a: &mut [Simd<u64, LANES>], b: &[Simd<u64, LANES>])
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		debug_assert!(a.len() == b.len());
+		izip!(a, b).for_each(|(a, b)| {
+			*a = self.add_simd(*a, *b);
+		});
+	}
+
+	pub fn sub_vec_simd(&self, a: &mut [u64], b: &[u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -882,6 +912,16 @@ impl Modulus {
 			self.sub_vec(a, b);
 		}
 	}
+	pub fn mul_simd_vec(&self, a: &mut [Simd<u64, LANES>], b: &[Simd<u64, LANES>])
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		izip!(a, b).for_each(|(_a, _b)| {
+			let r_hi = self.mulhi_simd(*_a, *_b);
+			let r_lo = *_a * *_b;
+			*_a = self.reduce_opt_u128_simd(r_hi, r_lo);
+		});
+	}
 }
 
 #[cfg(test)]
@@ -889,7 +929,7 @@ mod tests {
 	use std::simd::Simd;
 
 	use super::primes::generate_prime;
-	use super::{primes, Modulus};
+	use super::{primes, Modulus as Modulus2};
 	use fhe_util::catch_unwind;
 	use itertools::{izip, Itertools};
 	use proptest::collection::vec as prop_vec;
@@ -899,6 +939,10 @@ mod tests {
 	use rand::{thread_rng, RngCore};
 
 	// Utility functions for the proptests.
+
+	const LANES: usize = 8;
+
+	type Modulus = Modulus2<LANES>;
 
 	fn valid_moduli() -> impl Strategy<Value = Modulus> {
 		any::<u64>().prop_filter_map("filter invalid moduli", |p| Modulus::new(p).ok())
@@ -1289,16 +1333,10 @@ mod tests {
 			.unwrap();
 		let a_lo = Simd::from_array(tmp);
 
-		let barret_lo = Simd::from_array([q_mod.barrett_lo; LANES]);
-		let low_mask = Simd::from_array([4294967295u64; LANES]);
-		let shift_32 = Simd::from_array([32u64; LANES]);
-		let left_shift = Simd::from_array([q_mod.leading_zeros as u64; LANES]);
 		let mut now = std::time::Instant::now();
-		let reduced_simd = q_mod
-			.reduce_opt_u128_simd::<LANES>(a_hi, a_lo, barret_lo, low_mask, shift_32, left_shift)
-			.to_array()
-			.to_vec();
+		let reduced_simd = q_mod.reduce_opt_u128_simd(a_hi, a_lo);
 		println!("SIMD took: {:?}", now.elapsed());
+		let reduced_simd = reduced_simd.as_array().to_vec();
 
 		now = std::time::Instant::now();
 		let reduced = a.iter().map(|v| q_mod.reduce_opt_u128(*v)).collect_vec();

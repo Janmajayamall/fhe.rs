@@ -13,7 +13,7 @@ use num_traits::cast::ToPrimitive;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
 use std::{
 	ops::{BitAnd, Mul, Shl, Shr},
-	simd::{LaneCount, Simd, SimdOrd, SupportedLaneCount},
+	simd::{LaneCount, Mask, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount, ToBitMask},
 };
 
 /// Structure encapsulating an integer modulus up to 62 bits.
@@ -586,13 +586,6 @@ where
 		Self::reduce1(self.lazy_reduce_opt_u128(a), self.p)
 	}
 
-	pub fn reduce_opt_u128_vec(&self, a: &[u128]) -> Vec<u64> {
-		debug_assert!(self.supports_opt);
-		izip!(a)
-			.map(|v| Self::reduce1(self.lazy_reduce_opt_u128(*v), self.p))
-			.collect_vec()
-	}
-
 	/// Optimized modular reduction of a u128 in constant time.
 	///
 	/// # Safety
@@ -753,7 +746,7 @@ where
 		transcode_from_bytes(b, p_nbits)
 	}
 
-	pub fn reduce1_simd(a: Simd<u64, LANES>, p: Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn reduce1_simd(a: &Simd<u64, LANES>, p: &Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -778,20 +771,12 @@ where
 		let qb_lo = a_lo.shl(self.left_shift);
 
 		// q = qt + qb
-		let qt_lo_lo = qt_lo.bitand(self.low_mask);
-		let qb_lo_hi_c0 = qb_lo + qt_lo_lo;
-		let qb_hi_c0 = qb_lo_hi_c0.shr(self.shift_32);
-		let qt_lo_hi = qt_lo.shr(self.shift_32);
-		let qr_lo_hi = qb_hi_c0 + qt_lo_hi;
-		let c = qr_lo_hi.shr(self.shift_32);
-
-		// qr_hi = c + qt_hi + qb_hi
-		let qr_hi = c + qt_hi + qb_hi;
+		let r_lo = qt_lo + qb_lo;
+		let c_mask = r_lo.simd_lt(qt_lo);
+		let q_hi = c_mask.select(qt_hi + Simd::splat(1), qt_hi) + qb_hi;
 
 		// r = a_lo - qr_hi * p
-		let r = a_lo - qr_hi * self.p_simd;
-
-		r
+		a_lo - q_hi * self.p_simd
 	}
 
 	pub fn reduce_opt_u128_simd(
@@ -803,20 +788,16 @@ where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		let a = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
-		Self::reduce1_simd(a, self.p_simd)
+		Self::reduce1_simd(&a, &self.p_simd)
 	}
 
-	pub fn reduce_opt_u128_simd_vec(
-		&self,
-		a_hi: &[Simd<u64, LANES>],
-		a_lo: &[Simd<u64, LANES>],
-	) -> Vec<Simd<u64, LANES>>
+	pub fn reduce_opt_u128_simd_vec(&self, a_hi: &mut [Simd<u64, LANES>], a_lo: &[Simd<u64, LANES>])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		izip!(a_hi, a_lo)
-			.map(|(h, l)| self.reduce_opt_u128_simd(*h, *l))
-			.collect()
+		izip!(a_hi, a_lo).map(|(h, l)| {
+			*h = self.reduce_opt_u128_simd(*h, *l);
+		});
 	}
 
 	pub fn mulhi_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
@@ -851,20 +832,18 @@ where
 		c_hi
 	}
 
-	pub fn add_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn add_simd(&self, a: &Simd<u64, LANES>, b: &Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let p = Simd::<u64, LANES>::from_array([self.p; LANES]);
-		Self::reduce1_simd(a + b, p)
+		Self::reduce1_simd(&(a + b), &self.p_simd)
 	}
 
 	pub fn sub_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let p = Simd::<u64, LANES>::from_array([self.p; LANES]);
-		Self::reduce1_simd(a + p - b, p)
+		Self::reduce1_simd(&(a + self.p_simd - b), &self.p_simd)
 	}
 
 	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64])
@@ -877,7 +856,7 @@ where
 		if a0.len() == b0.len() && a1.len() == b1.len() && a2.len() == b2.len() {
 			self.add_vec(a0, b0);
 			izip!(a1, b1).for_each(|(a, b)| {
-				*a = self.add_simd(*a, *b);
+				*a = self.add_simd(a, b);
 			});
 			self.add_vec(a2, b2);
 		} else {
@@ -891,7 +870,7 @@ where
 	{
 		debug_assert!(a.len() == b.len());
 		izip!(a, b).for_each(|(a, b)| {
-			*a = self.add_simd(*a, *b);
+			*a = self.add_simd(a, b);
 		});
 	}
 
@@ -1315,31 +1294,28 @@ mod tests {
 		let rng = thread_rng();
 		let a = Uniform::new(0u128, p as u128 * p as u128)
 			.sample_iter(rng)
-			.take(LANES)
+			.take(2048)
 			.collect_vec();
 
-		let tmp: [u64; LANES] = a
-			.iter()
-			.map(|v| (v >> 64) as u64)
-			.collect_vec()
-			.try_into()
-			.unwrap();
-		let a_hi = Simd::from_array(tmp);
-		let tmp = a
-			.iter()
-			.map(|v| (v & ((1 << 64) - 1)) as u64)
-			.collect_vec()
-			.try_into()
-			.unwrap();
-		let a_lo = Simd::from_array(tmp);
+		let mut tmp = a.iter().map(|v| (v >> 64) as u64).collect_vec();
+		let (a_hi0, mut a_hi1, a_hi2) = tmp.as_simd_mut::<LANES>();
+		let mut tmp = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
+		let (a_lo0, a_lo1, a_lo2) = tmp.as_simd_mut::<LANES>();
+
+		assert!(a_hi0.len() + a_hi2.len() == 0);
 
 		let mut now = std::time::Instant::now();
-		let reduced_simd = q_mod.reduce_opt_u128_simd(a_hi, a_lo);
+		let res = izip!(a_hi1, a_lo1)
+			.map(|(h, l)| q_mod.reduce_opt_u128_simd(*h, *l))
+			.collect_vec();
 		println!("SIMD took: {:?}", now.elapsed());
-		let reduced_simd = reduced_simd.as_array().to_vec();
+		let reduced_simd = res.iter().flat_map(|v| v.as_array().to_vec()).collect_vec();
 
 		now = std::time::Instant::now();
-		let reduced = a.iter().map(|v| q_mod.reduce_opt_u128(*v)).collect_vec();
+		let reduced = a
+			.iter()
+			.map(|v| Modulus::reduce1(q_mod.lazy_reduce_opt_u128(*v), q_mod.p))
+			.collect_vec();
 		println!("Normal took: {:?}", now.elapsed());
 
 		assert_eq!(reduced_simd, reduced);

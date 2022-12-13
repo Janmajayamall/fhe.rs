@@ -32,13 +32,14 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			b.iter(|| q.add_vec_simd(&mut a, &c))
 		});
 
-		let (a0, mut a1, a2) = a.as_simd_mut::<8>();
-		let (c0, c1, c2) = c.as_simd::<8>();
-		assert!(a0.len() + a2.len() == 0);
 		group.bench_function(BenchmarkId::new("add_vec2_simd", vector_size), |b| {
+			let (a0, a1, a2) = a.as_simd_mut::<8>();
+			let (c0, c1, c2) = c.as_simd::<8>();
+			assert!(a0.len() + a2.len() == 0);
+
 			b.iter(|| {
 				q.add_simd_vec(a1, c1);
-			})
+			});
 		});
 
 		group.bench_function(BenchmarkId::new("sub_vec", vector_size), |b| {
@@ -69,54 +70,47 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			b.iter(|| q.scalar_mul_vec(&mut a, scalar));
 		});
 
-		let low_mask = (1u128 << 64) - 1;
-		let a_sq: (Vec<u64>, Vec<u64>) = a
-			.iter()
-			.map(|v| {
-				let sq = *v as u128 * *v as u128;
-				((sq >> 64) as u64, (sq & low_mask) as u64)
-			})
-			.unzip();
-		let (a0, a1, a2) = a.as_simd_mut::<8>();
-		let (c0, c1, c2) = c.as_simd::<8>();
-
 		group.bench_function(BenchmarkId::new("mul_vec_simd", vector_size), |b| {
+			let (a0, a1, a2) = a.as_simd_mut::<8>();
+			let (c0, c1, c2) = c.as_simd::<8>();
+
 			b.iter(|| q.mul_simd_vec(a1, c1));
 		});
 
 		let ac = izip!(a, c)
 			.map(|(_a, _c)| _a as u128 * _c as u128)
 			.collect_vec();
-		let mut ac2: (Vec<u64>, Vec<u64>) = ac
-			.iter()
-			.map(|v| ((v >> 64) as u64, (v & low_mask) as u64))
-			.unzip();
-		let (a_hi0, a_hi1, a_hi2) = ac2.0.as_simd_mut::<8>();
-		let (a_lo0, a_lo1, a_lo2) = ac2.1.as_simd_mut::<8>();
-		assert!(a_hi1.len() > 0);
-		dbg!(a_hi1[0]);
 		group.bench_function(BenchmarkId::new("reduce_opt_u128_simd", vector_size), |b| {
+			let low_mask = (1u128 << 64) - 1;
+			let mut ac2: (Vec<u64>, Vec<u64>) = ac
+				.iter()
+				.map(|v| ((v >> 64) as u64, (v & low_mask) as u64))
+				.unzip();
+			let (a_hi0, a_hi1, a_hi2) = ac2.0.as_simd_mut::<8>();
+			let (a_lo0, a_lo1, a_lo2) = ac2.1.as_simd_mut::<8>();
+			assert!(a_hi0.len() + a_hi2.len() == 0);
+
 			b.iter(|| {
-				// q.reduce_opt_u128_simd_vec(a_hi1, a_lo1);
-				let v = 2 * 2;
-				assert!(v == 4);
+				q.reduce_opt_u128_simd_vec(a_hi1, a_lo1);
 			});
 		});
 
-		// let mut tmp = Vec::with_capacity(ac.len());
-		// group.bench_function(
-		// 	BenchmarkId::new(
-		// 		"
-		// reduce_opt_u128",
-		// 		vector_size,
-		// 	),
-		// 	|b| {
-		// 		b.iter(|| {
-		// 			// q.reduce_opt_u128_vec(&ac, &mut tmp);
-		// 		});
-		// 	},
-		// );
-		// assert!(tmp.len() > 0);
+		group.bench_function(
+			BenchmarkId::new(
+				"
+		reduce_opt_u128",
+				vector_size,
+			),
+			|b| {
+				let ac = ac.clone();
+				let mut res = vec![0u64; ac.len()];
+				b.iter(|| {
+					for (v, r) in ac.iter().zip(res.iter_mut()) {
+						*r = q.reduce_opt_u128(*v);
+					}
+				});
+			},
+		);
 	}
 
 	group.finish();

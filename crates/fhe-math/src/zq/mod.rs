@@ -13,7 +13,9 @@ use num_traits::cast::ToPrimitive;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
 use std::{
 	ops::{BitAnd, Mul, Shl, Shr},
-	simd::{LaneCount, Mask, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount, ToBitMask},
+	simd::{
+		simd_swizzle, LaneCount, Mask, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount, ToBitMask,
+	},
 };
 
 /// Structure encapsulating an integer modulus up to 62 bits.
@@ -756,14 +758,14 @@ where
 
 	pub fn lazy_reduce_opt_u128_simd(
 		&self,
-		a_hi: Simd<u64, LANES>,
-		a_lo: Simd<u64, LANES>,
+		a_hi: &Simd<u64, LANES>,
+		a_lo: &Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		// qt = barret_lo * a_hi
-		let qt_hi = self.mulhi_simd(self.barret_lo_simd, a_hi);
+		let qt_hi = self.mulhi_simd(&self.barret_lo_simd, a_hi);
 		let qt_lo = self.barret_lo_simd * a_hi;
 
 		// qb = a << 2^s0
@@ -781,8 +783,8 @@ where
 
 	pub fn reduce_opt_u128_simd(
 		&self,
-		a_hi: Simd<u64, LANES>,
-		a_lo: Simd<u64, LANES>,
+		a_hi: &Simd<u64, LANES>,
+		a_lo: &Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
@@ -795,12 +797,13 @@ where
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		izip!(a_hi, a_lo).map(|(h, l)| {
-			*h = self.reduce_opt_u128_simd(*h, *l);
+		debug_assert!(a_hi.len() == a_lo.len());
+		izip!(a_hi, a_lo).for_each(|(h, l)| {
+			*h = self.reduce_opt_u128_simd(h, l);
 		});
 	}
 
-	pub fn mulhi_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn mulhi_simd(&self, a: &Simd<u64, LANES>, b: &Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -809,8 +812,15 @@ where
 		let b_hi = b.shr(self.shift_32);
 		let b_lo = b.bitand(self.low_mask);
 
+		// swizzle
+		// let sz = (0..LANES)
+		// 	.into_iter()
+		// 	.map(|v| if v == 0 { 0 } else { v - 1 })
+		// 	.collect_vec()
+		// 	.as_slice();
+
 		// c = a * b
-		let c_lo_lo = a_lo * b_lo;
+		let c_lo_lo = a * b;
 		let c_hi_lo = a_hi * b_lo;
 		let c_lo_hi = a_lo * b_hi;
 		let c_hi_hi = a_hi * b_hi;
@@ -896,9 +906,9 @@ where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		izip!(a, b).for_each(|(_a, _b)| {
-			let r_hi = self.mulhi_simd(*_a, *_b);
+			let r_hi = self.mulhi_simd(_a, _b);
 			let r_lo = *_a * *_b;
-			*_a = self.reduce_opt_u128_simd(r_hi, r_lo);
+			*_a = self.reduce_opt_u128_simd(&r_hi, &r_lo);
 		});
 	}
 }
@@ -1298,7 +1308,7 @@ mod tests {
 			.collect_vec();
 
 		let mut tmp = a.iter().map(|v| (v >> 64) as u64).collect_vec();
-		let (a_hi0, mut a_hi1, a_hi2) = tmp.as_simd_mut::<LANES>();
+		let (a_hi0, a_hi1, a_hi2) = tmp.as_simd_mut::<LANES>();
 		let mut tmp = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
 		let (a_lo0, a_lo1, a_lo2) = tmp.as_simd_mut::<LANES>();
 
@@ -1306,7 +1316,7 @@ mod tests {
 
 		let mut now = std::time::Instant::now();
 		let res = izip!(a_hi1, a_lo1)
-			.map(|(h, l)| q_mod.reduce_opt_u128_simd(*h, *l))
+			.map(|(h, l)| q_mod.reduce_opt_u128_simd(h, l))
 			.collect_vec();
 		println!("SIMD took: {:?}", now.elapsed());
 		let reduced_simd = res.iter().flat_map(|v| v.as_array().to_vec()).collect_vec();

@@ -77,7 +77,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			b.iter(|| q.mul_simd_vec(a1, c1));
 		});
 
-		let ac = izip!(a, c)
+		let ac = izip!(a.clone(), c.clone())
 			.map(|(_a, _c)| _a as u128 * _c as u128)
 			.collect_vec();
 		group.bench_function(BenchmarkId::new("reduce_opt_u128_simd", vector_size), |b| {
@@ -111,6 +111,14 @@ pub fn zq_benchmark(c: &mut Criterion) {
 				});
 			},
 		);
+
+		group.bench_function(BenchmarkId::new("mul_hi", vector_size), |b| {
+			let (a_hi0, a_hi1, a_hi2) = a.as_simd_mut::<8>();
+			let (_, c_hi1, _) = c.as_simd::<8>();
+			b.iter(|| {
+				q.mulhi_simd_vec(a_hi1, c_hi1 );
+			});
+		});
 	}
 
 	group.finish();

@@ -808,9 +808,9 @@ where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		let a_hi = a.shr(self.shift_32);
-		let a_lo = a.bitand(self.low_mask);
+		// let a_lo = a.bitand(self.low_mask);
 		let b_hi = b.shr(self.shift_32);
-		let b_lo = b.bitand(self.low_mask);
+		// let b_lo = b.bitand(self.low_mask);
 
 		// swizzle
 		// let sz = (0..LANES)
@@ -821,8 +821,8 @@ where
 
 		// c = a * b
 		let c_lo_lo = a * b;
-		let c_hi_lo = a_hi * b_lo;
-		let c_lo_hi = a_lo * b_hi;
+		let c_hi_lo = a_hi * b;
+		let c_lo_hi = a * b_hi;
 		let c_hi_hi = a_hi * b_hi;
 
 		// Calc c_hi
@@ -840,6 +840,13 @@ where
 		c_hi += s_mid;
 
 		c_hi
+	}
+
+	pub fn mulhi_simd_vec(&self, a: &mut [Simd<u64, LANES>], b: &[Simd<u64, LANES>])
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		izip!(a, b).for_each(|(a, b)| *a = self.mulhi_simd(a, b))
 	}
 
 	pub fn add_simd(&self, a: &Simd<u64, LANES>, b: &Simd<u64, LANES>) -> Simd<u64, LANES>

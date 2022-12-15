@@ -32,13 +32,8 @@ where
 	pub(crate) supports_opt: bool,
 	distribution: Uniform<u64>,
 
-	//simd
-	p_simd: Simd<u64, LANES>,
-	barret_lo_simd: Simd<u64, LANES>,
-	low_mask: Simd<u64, LANES>,
-	shift_32: Simd<u64, LANES>,
-	left_shift: Simd<u64, LANES>,
-	right_shift: Simd<u64, LANES>,
+	leading_zeros_u64: u64,
+	bits: u64,
 }
 
 // We need to declare Eq manually because of the `Uniform` member.
@@ -55,13 +50,6 @@ where
 		} else {
 			let barrett = ((BigUint::from(1u64) << 128usize) / p).to_u128().unwrap(); // 2^128 / p
 
-			let p_simd = Simd::from_array([p; LANES]);
-			let barret_lo_simd = Simd::from_array([barrett as u64; LANES]);
-			let low_mask = Simd::from_array([4294967295u64; LANES]);
-			let shift_32 = Simd::from_array([32u64; LANES]);
-			let left_shift = Simd::from_array([p.leading_zeros() as u64; LANES]);
-			let right_shift = Simd::from_array([64 - p.leading_zeros() as u64; LANES]);
-
 			Ok(Self {
 				p,
 				nbits: 64 - p.leading_zeros() as usize,
@@ -70,13 +58,8 @@ where
 				leading_zeros: p.leading_zeros(),
 				supports_opt: primes::supports_opt(p),
 				distribution: Uniform::from(0..p),
-
-				p_simd,
-				barret_lo_simd,
-				low_mask,
-				shift_32,
-				left_shift,
-				right_shift,
+				leading_zeros_u64: p.leading_zeros() as u64,
+				bits: 64 - p.leading_zeros() as u64,
 			})
 		}
 	}
@@ -765,12 +748,14 @@ where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		// qt = barret_lo * a_hi
-		let qt_hi = self.mulhi_simd(&self.barret_lo_simd, a_hi);
-		let qt_lo = self.barret_lo_simd * a_hi;
+		let barret_lo = Simd::splat(self.barrett_lo);
+		let qt_hi = self.mulhi_simd(&barret_lo, a_hi);
+		let qt_lo = barret_lo * a_hi;
 
 		// qb = a << 2^s0
-		let qb_hi = a_hi.shl(self.left_shift) + a_lo.shr(self.right_shift);
-		let qb_lo = a_lo.shl(self.left_shift);
+		let ls = Simd::splat(self.leading_zeros_u64);
+		let qb_hi = a_hi.shl(ls) + a_lo.shr(Simd::splat(self.bits));
+		let qb_lo = a_lo.shl(ls);
 
 		// q = qt + qb
 		let r_lo = qt_lo + qb_lo;
@@ -778,7 +763,7 @@ where
 		let q_hi = c_mask.select(qt_hi + Simd::splat(1), qt_hi) + qb_hi;
 
 		// r = a_lo - qr_hi * p
-		a_lo - q_hi * self.p_simd
+		a_lo - q_hi * Simd::splat(self.p)
 	}
 
 	pub fn reduce_opt_u128_simd(
@@ -790,7 +775,7 @@ where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		let a = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
-		Self::reduce1_simd(&a, &self.p_simd)
+		Self::reduce1_simd(&a, &Simd::splat(self.p))
 	}
 
 	pub fn reduce_opt_u128_simd_vec(&self, a_hi: &mut [Simd<u64, LANES>], a_lo: &[Simd<u64, LANES>])
@@ -807,34 +792,29 @@ where
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let a_hi = a.shr(self.shift_32);
-		// let a_lo = a.bitand(self.low_mask);
-		let b_hi = b.shr(self.shift_32);
-		// let b_lo = b.bitand(self.low_mask);
+		let shift_32 = Simd::splat(32);
+		let low_mask = Simd::splat(0xffffffffu64);
 
-		// swizzle
-		// let sz = (0..LANES)
-		// 	.into_iter()
-		// 	.map(|v| if v == 0 { 0 } else { v - 1 })
-		// 	.collect_vec()
-		// 	.as_slice();
+		let a_hi = a.shr(shift_32);
+		let a_lo = a.bitand(low_mask);
+		let b_hi = b.shr(shift_32);
+		let b_lo = b.bitand(low_mask);
 
 		// c = a * b
-		let c_lo_lo = a * b;
-		let c_hi_lo = a_hi * b;
-		let c_lo_hi = a * b_hi;
+		let c_lo_lo = a_lo * b_lo;
+		let c_hi_lo = a_hi * b_lo;
+		let c_lo_hi = a_lo * b_hi;
 		let c_hi_hi = a_hi * b_hi;
 
 		// Calc c_hi
 
 		// we don't need lower 32 bits of c_lo_lo for c_hi
-		let c_lo_lo_shift = c_lo_lo.shr(self.shift_32);
+		let c_lo_lo_shift = c_lo_lo.shr(shift_32);
 
 		let s_mid = c_hi_lo + c_lo_lo_shift;
-		let s_low = s_mid.bitand(self.low_mask);
-		let s_mid = s_mid.shr(self.shift_32);
-		let s_mid2 = c_lo_hi + s_low;
-		let s_mid2 = s_mid2.shr(self.shift_32);
+		let s_low = s_mid.bitand(low_mask);
+		let s_mid = s_mid.shr(shift_32);
+		let s_mid2 = (c_lo_hi + s_low).shr(shift_32);
 
 		let mut c_hi = c_hi_hi + s_mid2;
 		c_hi += s_mid;
@@ -853,14 +833,15 @@ where
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		Self::reduce1_simd(&(a + b), &self.p_simd)
+		Self::reduce1_simd(&(a + b), &Simd::splat(self.p))
 	}
 
 	pub fn sub_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		Self::reduce1_simd(&(a + self.p_simd - b), &self.p_simd)
+		let p = Simd::splat(self.p);
+		Self::reduce1_simd(&(a + p - b), &p)
 	}
 
 	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64])

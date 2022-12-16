@@ -930,19 +930,15 @@ impl Modulus {
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let low_mask = Simd::splat(0xffffffffu64);
-
 		let q = self.mulhi_simd(a, b_shoup);
-
-		let ab = (a * b).bitand(low_mask);
-		let qp = (q * Simd::splat(self.p)).bitand(low_mask);
-
-		ab - qp
+		(a * b) - (q * Simd::splat(self.p))
 	}
 }
 
 #[cfg(test)]
 mod tests {
+	use std::simd::Simd;
+
 	use super::primes::generate_prime;
 	use super::{primes, Modulus};
 	use fhe_util::catch_unwind;
@@ -952,6 +948,7 @@ mod tests {
 	use rand::distributions::Uniform;
 	use rand::prelude::Distribution;
 	use rand::{thread_rng, RngCore};
+	use sha2::digest::typenum::Mod;
 
 	// Utility functions for the proptests.
 
@@ -1316,6 +1313,28 @@ mod tests {
 				}
 			}
 		}
+	}
+
+	#[test]
+	fn lazy_mul_shoup_simd_works() {
+		let mut rng = thread_rng();
+		let q = Modulus::new(4611686018326724609).unwrap();
+
+		let vals = Uniform::new(0, q.p).sample_iter(rng).take(16).collect_vec();
+
+		let (a, b) = vals.split_at(8);
+		let b_shoup = q.shoup_vec(b.to_vec().as_slice());
+		let product = izip!(a, b, b_shoup.iter())
+			.map(|(_a, _b, _b_shoup)| q.lazy_mul_shoup(*_a, *_b, *_b_shoup))
+			.collect_vec();
+
+		let product_simd = q.lazy_mul_shoup_simd::<8>(
+			&Simd::from_slice(a),
+			&Simd::from_slice(b),
+			&Simd::from_slice(b_shoup.as_slice()),
+		);
+
+		assert_eq!(product, product_simd.as_array());
 	}
 
 	#[test]

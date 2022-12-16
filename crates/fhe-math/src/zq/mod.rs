@@ -1,5 +1,4 @@
 #![warn(missing_docs, unused_imports)]
-
 //! Ring operations for moduli up to 62 bits.
 
 pub mod ntt;

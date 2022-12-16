@@ -2,6 +2,7 @@
 #![crate_type = "lib"]
 #![warn(missing_docs, unused_imports)]
 #![feature(portable_simd)]
+#![feature(slice_as_chunks)]
 
 //! Mathematical utilities for the fhe.rs library.
 

@@ -20,10 +20,7 @@ use std::{
 
 /// Structure encapsulating an integer modulus up to 62 bits.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Modulus<const LANES: usize>
-where
-	LaneCount<LANES>: SupportedLaneCount,
-{
+pub struct Modulus {
 	p: u64,
 	nbits: usize,
 	barrett_hi: u64,
@@ -37,12 +34,9 @@ where
 }
 
 // We need to declare Eq manually because of the `Uniform` member.
-impl<const LANES: usize> Eq for Modulus<LANES> where LaneCount<LANES>: SupportedLaneCount {}
+impl Eq for Modulus {}
 
-impl<const LANES: usize> Modulus<LANES>
-where
-	LaneCount<LANES>: SupportedLaneCount,
-{
+impl Modulus {
 	/// Create a modulus from an integer of at most 62 bits.
 	pub fn new(p: u64) -> Result<Self> {
 		if p < 2 || (p >> 62) != 0 {
@@ -731,7 +725,10 @@ where
 		transcode_from_bytes(b, p_nbits)
 	}
 
-	pub fn reduce1_simd(a: &Simd<u64, LANES>, p: &Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn reduce1_simd<const LANES: usize>(
+		a: &Simd<u64, LANES>,
+		p: &Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -739,7 +736,7 @@ where
 		a.simd_min(a_minus_p)
 	}
 
-	pub fn lazy_reduce_opt_u128_simd(
+	pub fn lazy_reduce_opt_u128_simd<const LANES: usize>(
 		&self,
 		a_hi: &Simd<u64, LANES>,
 		a_lo: &Simd<u64, LANES>,
@@ -766,7 +763,7 @@ where
 		a_lo - q_hi * Simd::splat(self.p)
 	}
 
-	pub fn reduce_opt_u128_simd(
+	pub fn reduce_opt_u128_simd<const LANES: usize>(
 		&self,
 		a_hi: &Simd<u64, LANES>,
 		a_lo: &Simd<u64, LANES>,
@@ -778,8 +775,11 @@ where
 		Self::reduce1_simd(&a, &Simd::splat(self.p))
 	}
 
-	pub fn reduce_opt_u128_simd_vec(&self, a_hi: &mut [Simd<u64, LANES>], a_lo: &[Simd<u64, LANES>])
-	where
+	pub fn reduce_opt_u128_simd_vec<const LANES: usize>(
+		&self,
+		a_hi: &mut [Simd<u64, LANES>],
+		a_lo: &[Simd<u64, LANES>],
+	) where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		debug_assert!(a_hi.len() == a_lo.len());
@@ -788,7 +788,11 @@ where
 		});
 	}
 
-	pub fn mulhi_simd(&self, a: &Simd<u64, LANES>, b: &Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn mulhi_simd<const LANES: usize>(
+		&self,
+		a: &Simd<u64, LANES>,
+		b: &Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -822,21 +826,32 @@ where
 		c_hi
 	}
 
-	pub fn mulhi_simd_vec(&self, a: &mut [Simd<u64, LANES>], b: &[Simd<u64, LANES>])
-	where
+	pub fn mulhi_simd_vec<const LANES: usize>(
+		&self,
+		a: &mut [Simd<u64, LANES>],
+		b: &[Simd<u64, LANES>],
+	) where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		izip!(a, b).for_each(|(a, b)| *a = self.mulhi_simd(a, b))
 	}
 
-	pub fn add_simd(&self, a: &Simd<u64, LANES>, b: &Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn add_simd<const LANES: usize>(
+		&self,
+		a: &Simd<u64, LANES>,
+		b: &Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		Self::reduce1_simd(&(a + b), &Simd::splat(self.p))
 	}
 
-	pub fn sub_simd(&self, a: Simd<u64, LANES>, b: Simd<u64, LANES>) -> Simd<u64, LANES>
+	pub fn sub_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -844,7 +859,7 @@ where
 		Self::reduce1_simd(&(a + p - b), &p)
 	}
 
-	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64])
+	pub fn add_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -862,8 +877,11 @@ where
 		}
 	}
 
-	pub fn add_simd_vec(&self, a: &mut [Simd<u64, LANES>], b: &[Simd<u64, LANES>])
-	where
+	pub fn add_simd_vec<const LANES: usize>(
+		&self,
+		a: &mut [Simd<u64, LANES>],
+		b: &[Simd<u64, LANES>],
+	) where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		debug_assert!(a.len() == b.len());
@@ -872,7 +890,7 @@ where
 		});
 	}
 
-	pub fn sub_vec_simd(&self, a: &mut [u64], b: &[u64])
+	pub fn sub_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -889,8 +907,12 @@ where
 			self.sub_vec(a, b);
 		}
 	}
-	pub fn mul_simd_vec(&self, a: &mut [Simd<u64, LANES>], b: &[Simd<u64, LANES>])
-	where
+
+	pub fn mul_simd_vec<const LANES: usize>(
+		&self,
+		a: &mut [Simd<u64, LANES>],
+		b: &[Simd<u64, LANES>],
+	) where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		izip!(a, b).for_each(|(_a, _b)| {
@@ -899,14 +921,31 @@ where
 			*_a = self.reduce_opt_u128_simd(&r_hi, &r_lo);
 		});
 	}
+
+	pub fn lazy_mul_shoup_simd<const LANES: usize>(
+		&self,
+		a: &Simd<u64, LANES>,
+		b: &Simd<u64, LANES>,
+		b_shoup: &Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let low_mask = Simd::splat(0xffffffffu64);
+
+		let q = self.mulhi_simd(a, b_shoup);
+
+		let ab = (a * b).bitand(low_mask);
+		let qp = (q * Simd::splat(self.p)).bitand(low_mask);
+
+		ab - qp
+	}
 }
 
 #[cfg(test)]
 mod tests {
-	use std::simd::Simd;
-
 	use super::primes::generate_prime;
-	use super::{primes, Modulus as Modulus2};
+	use super::{primes, Modulus};
 	use fhe_util::catch_unwind;
 	use itertools::{izip, Itertools};
 	use proptest::collection::vec as prop_vec;
@@ -918,8 +957,6 @@ mod tests {
 	// Utility functions for the proptests.
 
 	const LANES: usize = 8;
-
-	type Modulus = Modulus2<LANES>;
 
 	fn valid_moduli() -> impl Strategy<Value = Modulus> {
 		any::<u64>().prop_filter_map("filter invalid moduli", |p| Modulus::new(p).ok())

@@ -1,11 +1,11 @@
 //! Number-Theoretic Transform in ZZ_q.
 
-use super::Modulus as Modulus2;
+use std::simd::{LaneCount, Simd, SimdPartialOrd, SupportedLaneCount};
+
+use super::Modulus;
 use fhe_util::is_prime;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-
-type Modulus = Modulus2<8>;
 
 /// Returns whether a modulus p is prime and supports the Number Theoretic
 /// Transform of size n.
@@ -399,6 +399,24 @@ impl NttOperator {
 		// for all prime p dividing n.
 		(p.pow(a, n as u64) == 1) && (p.pow(a, (n / 2) as u64) != 1)
 	}
+
+	fn butterfly_simd<const LANES: usize>(
+		&self,
+		x: &mut Simd<u64, LANES>,
+		y: &mut Simd<u64, LANES>,
+		w: Simd<u64, LANES>,
+		w_shoup: Simd<u64, LANES>,
+	) where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		// reduce x to [0, 2p)
+		let p_twice = Simd::splat(self.p_twice);
+		*x = x.simd_lt(p_twice).select(*x, *x - p_twice);
+
+		let t = self.p.lazy_mul_shoup_simd(&(*y), &w, &w_shoup);
+		*y = *x + p_twice - t;
+		*x += t;
+	}
 }
 
 #[cfg(test)]
@@ -406,9 +424,7 @@ mod tests {
 	use rand::thread_rng;
 
 	use super::{supports_ntt, NttOperator};
-	use crate::zq::Modulus as Modulus2;
-
-	type Modulus = Modulus2<8>;
+	use crate::zq::Modulus;
 
 	#[test]
 	fn constructor() {

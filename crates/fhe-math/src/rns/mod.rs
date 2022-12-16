@@ -2,7 +2,7 @@
 
 //! Residue-Number System operations.
 
-use crate::{zq::Modulus as Modulus2, Error, Result};
+use crate::{zq::Modulus, Error, Result};
 use itertools::izip;
 use ndarray::ArrayView1;
 use num_bigint::BigUint;
@@ -13,8 +13,6 @@ use std::{cmp::Ordering, fmt::Debug};
 mod scaler;
 
 pub use scaler::{RnsScaler, ScalingFactor};
-
-type Modulus = Modulus2<8>;
 
 /// Context for a Residue Number System.
 #[derive(Default, Clone, PartialEq, Eq)]

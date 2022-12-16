@@ -463,11 +463,9 @@ mod tests {
 	use super::dot_product;
 	use crate::{
 		rq::{Context, Poly, Representation},
-		zq::Modulus as Modulus2,
+		zq::Modulus,
 	};
 	use std::{error::Error, sync::Arc};
-
-	type Modulus = Modulus2<8>;
 
 	static MODULI: &[u64; 3] = &[1153, 4611686018326724609, 4611686018309947393];
 

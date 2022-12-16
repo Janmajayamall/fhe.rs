@@ -88,7 +88,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 				.unzip();
 			let (a_hi0, a_hi1, a_hi2) = ac2.0.as_simd_mut::<8>();
 			let (a_lo0, a_lo1, a_lo2) = ac2.1.as_simd_mut::<8>();
-			assert!(a_hi0.len() + a_hi2.len() == 0);
+			// assert!(a_hi0.len() + a_hi2.len() == 0);
 
 			b.iter(|| {
 				q.reduce_opt_u128_simd_vec(a_hi1, a_lo1);
@@ -116,7 +116,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			let (a_hi0, a_hi1, a_hi2) = a.as_simd_mut::<8>();
 			let (_, c_hi1, _) = c.as_simd::<8>();
 			b.iter(|| {
-				q.mulhi_simd_vec(a_hi1, c_hi1 );
+				q.mulhi_simd_vec(a_hi1, c_hi1);
 			});
 		});
 	}

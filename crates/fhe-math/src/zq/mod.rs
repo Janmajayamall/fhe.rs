@@ -933,6 +933,19 @@ impl Modulus {
 		let q = self.mulhi_simd(a, b_shoup);
 		(a * b) - (q * Simd::splat(self.p))
 	}
+
+	pub fn lazy_mul_shoup_simd_vec<const LANES: usize>(
+		&self,
+		a: &mut [Simd<u64, LANES>],
+		b: &[Simd<u64, LANES>],
+		b_shoup: &[Simd<u64, LANES>],
+	) where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		izip!(a, b, b_shoup).for_each(|(a, b, b_shoup)| {
+			*a = self.lazy_mul_shoup_simd(a, b, b_shoup);
+		});
+	}
 }
 
 #[cfg(test)]
@@ -1325,7 +1338,7 @@ mod tests {
 		let (a, b) = vals.split_at(8);
 		let b_shoup = q.shoup_vec(b.to_vec().as_slice());
 		let product = izip!(a, b, b_shoup.iter())
-			.map(|(_a, _b, _b_shoup)| q.lazy_mul_shoup(*_a, *_b, *_b_shoup))
+			.map(|(_a, _b, _b_shoup)| q.mul_shoup(*_a, *_b, *_b_shoup))
 			.collect_vec();
 
 		let product_simd = q.lazy_mul_shoup_simd::<8>(
@@ -1333,8 +1346,9 @@ mod tests {
 			&Simd::from_slice(b),
 			&Simd::from_slice(b_shoup.as_slice()),
 		);
+		let tmp = Modulus::reduce1_simd(&product_simd, &Simd::splat(q.p));
 
-		assert_eq!(product, product_simd.as_array());
+		assert_eq!(product, tmp.as_array());
 	}
 
 	#[test]

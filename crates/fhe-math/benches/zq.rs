@@ -29,7 +29,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 		});
 
 		group.bench_function(BenchmarkId::new("add_vec_simd", vector_size), |b| {
-			b.iter(|| q.add_vec_simd(&mut a, &c))
+			b.iter(|| q.add_vec_simd::<8>(&mut a, &c))
 		});
 
 		group.bench_function(BenchmarkId::new("add_vec2_simd", vector_size), |b| {
@@ -47,7 +47,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 		});
 
 		group.bench_function(BenchmarkId::new("sub_vec_simd", vector_size), |b| {
-			b.iter(|| q.sub_vec_simd(&mut a, &c))
+			b.iter(|| q.sub_vec_simd::<8>(&mut a, &c))
 		});
 
 		group.bench_function(BenchmarkId::new("neg_vec", vector_size), |b| {
@@ -117,6 +117,23 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			let (_, c_hi1, _) = c.as_simd::<8>();
 			b.iter(|| {
 				q.mulhi_simd_vec(a_hi1, c_hi1);
+			});
+		});
+
+		group.bench_function(BenchmarkId::new("lazy_mul_shoup_simd", vector_size), |b| {
+			let (a0, a1, a2) = a.as_simd_mut::<8>();
+			let (_, c1, _) = c.as_simd::<8>();
+			let (_, c_shoup1, _) = c_shoup.as_simd::<8>();
+			assert!(a0.len() + a2.len() == 0);
+			b.iter(|| q.lazy_mul_shoup_simd_vec(a1, c1, c_shoup1));
+		});
+
+		group.bench_function(BenchmarkId::new("lazy_mul_shoup", vector_size), |b| {
+			// let (a, c, c_shoup) = (a.clone(), c.clone(), c_shoup.clone());
+			b.iter(|| {
+				izip!(a.iter(), c.iter(), c_shoup.iter()).for_each(|(a, c, c_shoup)| {
+					q.lazy_mul_shoup(*a, *c, *c_shoup);
+				});
 			});
 		});
 	}

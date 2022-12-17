@@ -1,6 +1,10 @@
 //! Number-Theoretic Transform in ZZ_q.
 
-use std::simd::{LaneCount, Simd, SimdPartialOrd, SupportedLaneCount};
+use std::{
+	ops::BitAnd,
+	simd::{LaneCount, Simd, SimdOrd, SimdPartialEq, SimdPartialOrd, SupportedLaneCount},
+	vec,
+};
 
 use super::Modulus;
 use fhe_util::is_prime;
@@ -151,14 +155,14 @@ impl NttOperator {
 					let zeta_inv_shoup = *self.zetas_inv_shoup.get_unchecked(k);
 					k += 1;
 					match l {
-						1 => {
-							self.inv_butterfly(
-								&mut *a_ptr.add(s),
-								&mut *a_ptr.add(s + l),
-								zeta_inv,
-								zeta_inv_shoup,
-							);
-						}
+						// 1 => {
+						// 	self.inv_butterfly(
+						// 		&mut *a_ptr.add(s),
+						// 		&mut *a_ptr.add(s + l),
+						// 		zeta_inv,
+						// 		zeta_inv_shoup,
+						// 	);
+						// }
 						_ => {
 							for j in s..(s + l) {
 								self.inv_butterfly(
@@ -528,7 +532,7 @@ impl NttOperator {
 		let mut m = n >> 1;
 		let mut k = 0;
 
-		while l > 0 {
+		while m > 0 {
 			unsafe {
 				match l {
 					1 | 2 | 4 => {
@@ -539,7 +543,7 @@ impl NttOperator {
 
 							let s = 2 * i * l;
 
-							for j in s..s + l {
+							for j in s..(s + l) {
 								self.inv_butterfly(
 									&mut *a_ptr.add(j),
 									&mut *a_ptr.add(j + l),
@@ -558,10 +562,18 @@ impl NttOperator {
 
 							let s = 2 * i * l;
 
-							let (x, _) =
+							// let f_x = *a_ptr.add(s);
+							// let f_y = *a_ptr.add(s + l);
+
+							let (x, ws) =
 								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
-							let (y, _) =
+							let (y, ws1) =
 								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
+							// assert!(ws.len() + ws1.len() == 0);
+							// assert!(x.len() == y.len());
+							// assert!(f_x == x[0][0]);
+							// assert!(f_y == y[0][0]);
+
 							izip!(x, y).for_each(|(_x, _y)| {
 								let (xr, yr) = self.inv_butterfly_simd(
 									Simd::from_slice(_x),
@@ -576,21 +588,31 @@ impl NttOperator {
 					}
 				}
 			}
-			l >>= 1;
-			m <<= 1;
+			l <<= 1;
+			m >>= 1;
 		}
 
-		// multiply each val with size inv
-		let (x, _) = a.as_chunks_mut();
 		let size_inv = Simd::splat(self.size_inv);
 		let size_inv_shoup = Simd::splat(self.size_inv_shoup);
-		let p_twice = Simd::splat(self.p_twice);
+		let p = Simd::splat(self.p.p);
+
+		let (x, x1) = a.as_chunks_mut();
+		debug_assert!(x1.is_empty());
 		x.iter_mut().for_each(|v| {
 			let mut _x = Simd::from_slice(v);
 			_x = self.p.lazy_mul_shoup_simd(&_x, &size_inv, &size_inv_shoup);
-			_x = _x.simd_lt(p_twice).select(_x, _x - p_twice);
+			_x = Modulus::reduce1_simd(&_x, &p);
 			*v = *_x.as_array();
 		});
+
+		// let (x0, x, x2) = a.as_simd_mut();
+		// assert!(x0.len() + x2.len() == 0);
+		// x.iter_mut().for_each(|_x| {
+		// 	// let mut _x = Simd::from_slice(v);
+		// 	*_x = self.p.lazy_mul_shoup_simd(&_x, &size_inv, &size_inv_shoup);
+		// 	*_x = Modulus::reduce1_simd(&_x, &p);
+		// 	// *v = *_x.as_array();
+		// });
 	}
 
 	fn butterfly_simd<const LANES: usize>(
@@ -618,20 +640,20 @@ impl NttOperator {
 		&self,
 		mut x: Simd<u64, LANES>,
 		mut y: Simd<u64, LANES>,
-		w_inv: Simd<u64, LANES>,
-		w_inv_shoup: Simd<u64, LANES>,
+		z: Simd<u64, LANES>,
+		z_shoup: Simd<u64, LANES>,
 	) -> (Simd<u64, LANES>, Simd<u64, LANES>)
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		let p_twice = Simd::splat(self.p_twice);
-		let y_minus_2p = y - p_twice;
-		let t = x - y_minus_2p;
-
-		// reduce x to [0, 2p)
+		//
 		// TODO replace this reduce with reduce in hexl implementation
-		x = x.simd_lt(p_twice).select(x, x - p_twice);
-		y = self.p.lazy_mul_shoup_simd(&t, &w_inv, &w_inv_shoup);
+		let t = x;
+		x += y;
+		x = x.simd_min(x - p_twice);
+
+		y = self.p.lazy_mul_shoup_simd(&(p_twice + t - y), &z, &z_shoup);
 
 		(x, y)
 	}
@@ -746,6 +768,60 @@ mod tests {
 
 						op.forward_simd::<8>(&mut b);
 						assert_eq!(a, b);
+					}
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn backward_simd_works() {
+		let mut rng = thread_rng();
+		for size in [32, 1024] {
+			for p in [1153, 4611686018326724609] {
+				if supports_ntt(p, size) {
+					let q = Modulus::new(p).unwrap();
+
+					let op = NttOperator::new(&q, size).unwrap();
+
+					for _ in 0..100 {
+						let mut a = q.random_vec(size, &mut rng);
+						let mut a_clone = a.clone();
+						op.forward_simd::<8>(&mut a);
+						assert_ne!(a_clone, a);
+
+						op.backward_simd::<8>(&mut a);
+						assert_eq!(a_clone, a);
+					}
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn error_test() {
+		let mut rng = thread_rng();
+		for size in [32, 1024] {
+			for p in [1153] {
+				if supports_ntt(p, size) {
+					let q = Modulus::new(p).unwrap();
+
+					let op = NttOperator::new(&q, size).unwrap();
+
+					for _ in 0..100 {
+						let mut a = q.random_vec(size, &mut rng);
+						let mut a_clone = a.clone();
+
+						op.forward_simd::<8>(&mut a);
+
+						op.backward_simd::<8>(&mut a);
+						assert_eq!(a_clone, a);
+
+						// let mut a_clone2 = a.clone();
+
+						// op.backward(&mut a_clone);
+						// op.backward_simd::<8>(&mut a_clone2);
+						// assert_eq!(a_clone, a_clone2);
 					}
 				}
 			}

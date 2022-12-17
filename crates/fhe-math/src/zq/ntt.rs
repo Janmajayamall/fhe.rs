@@ -2,7 +2,10 @@
 
 use std::{
 	ops::BitAnd,
-	simd::{LaneCount, Simd, SimdOrd, SimdPartialEq, SimdPartialOrd, SupportedLaneCount},
+	simd::{
+		simd_swizzle, LaneCount, Simd, SimdOrd, SimdPartialEq, SimdPartialOrd, SupportedLaneCount,
+		Which::{First, Second},
+	},
 	vec,
 };
 
@@ -565,6 +568,215 @@ impl NttOperator {
 		});
 	}
 
+	pub fn forward_simd_8(&self, a: &mut [u64]) {
+		// debug_assert!(LANES == 8);
+
+		let n = self.size;
+		let a_ptr = a.as_mut_ptr();
+
+		let mut l = n >> 1;
+		let mut m = 1;
+		let mut k = 1;
+
+		while l > 0 {
+			unsafe {
+				match l {
+					// FIXME
+					// 4 => {
+					// 	for i in 0..(m / 2) {
+					// let o1 = *self.omegas.get_unchecked(k);
+					// let o2 = *self.omegas.get_unchecked(k + 1);
+					// let os1 = *self.omegas.get_unchecked(k);
+					// let os2 = *self.omegas.get_unchecked(k + 1);
+					// k += 2;
+
+					// let omega = Simd::from_slice(&[o1, o1, o1, o1, o2, o2, o2, o2]);
+					// let omega_shoup =
+					// 	Simd::from_slice(&[os1, os1, os1, os1, os2, os2, os2, os2]);
+
+					// 		let s = i * 8;
+					// 		let x1 = std::slice::from_raw_parts_mut(a_ptr.add(s), 4);
+					// 		let x2 = std::slice::from_raw_parts_mut(a_ptr.add(s + 8), 4);
+					// 		let y1 = std::slice::from_raw_parts_mut(a_ptr.add(s + l), 4);
+					// 		let y2 = std::slice::from_raw_parts_mut(a_ptr.add(s + 8 + l), 4);
+
+					// 		let x = [&*x1, &*x2].concat();
+					// 		let y = [&*y1, &*y2].concat();
+
+					// 		let (xr, yr) = self.butterfly_simd(
+					// 			Simd::from_slice(x.as_slice()),
+					// 			Simd::from_slice(y.as_slice()),
+					// 			omega,
+					// 			omega_shoup,
+					// 		);
+					// 		let xr = xr.as_array();
+					// 		let yr = yr.as_array();
+
+					// 		x1.copy_from_slice(&xr[0..4]);
+					// 		x2.copy_from_slice(&xr[4..]);
+					// 		y1.copy_from_slice(&yr[0..4]);
+					// 		y2.copy_from_slice(&yr[4..]);
+					// 	}
+
+					// }
+					1 | 2 => {
+						for i in 0..m {
+							let omega = *self.omegas.get_unchecked(k);
+							let omega_shoup = *self.omegas_shoup.get_unchecked(k);
+							k += 1;
+
+							let s = 2 * i * l;
+
+							for j in s..s + l {
+								self.butterfly(
+									&mut *a_ptr.add(j),
+									&mut *a_ptr.add(j + l),
+									omega,
+									omega_shoup,
+								);
+							}
+						}
+					}
+					4 => {
+						for i in 0..(m / 2) {
+							let o1 = *self.omegas.get_unchecked(k);
+							let o2 = *self.omegas.get_unchecked(k + 1);
+							let os1 = *self.omegas_shoup.get_unchecked(k);
+							let os2 = *self.omegas_shoup.get_unchecked(k + 1);
+							k += 2;
+
+							let omega = Simd::from_slice(&[o1, o1, o1, o1, o2, o2, o2, o2]);
+							let omega_shoup =
+								Simd::from_slice(&[os1, os1, os1, os1, os2, os2, os2, os2]);
+
+							let s = 2 * i * 8;
+
+							let a: &[u64; 8] = std::slice::from_raw_parts(a_ptr.add(s), 8)
+								.try_into()
+								.unwrap();
+							let b: &[u64; 8] = std::slice::from_raw_parts(a_ptr.add(s + 8), 8)
+								.try_into()
+								.unwrap();
+
+							let a1 = Simd::from_array(*a);
+							let a2 = Simd::from_array(*b);
+
+							// shuffle
+							let x = simd_swizzle!(
+								a1,
+								a2,
+								[
+									First(0),
+									First(1),
+									First(2),
+									First(3),
+									Second(0),
+									Second(1),
+									Second(2),
+									Second(3)
+								]
+							);
+							let y = simd_swizzle!(
+								a1,
+								a2,
+								[
+									First(4),
+									First(5),
+									First(6),
+									First(7),
+									Second(4),
+									Second(5),
+									Second(6),
+									Second(7)
+								]
+							);
+
+							let (x, y) = self.butterfly_simd::<8>(x, y, omega, omega_shoup);
+
+							// shuffle back
+							let xr = simd_swizzle!(
+								x,
+								y,
+								[
+									First(0),
+									First(1),
+									First(2),
+									First(3),
+									Second(0),
+									Second(1),
+									Second(2),
+									Second(3)
+								]
+							);
+							let yr = simd_swizzle!(
+								x,
+								y,
+								[
+									First(4),
+									First(5),
+									First(6),
+									First(7),
+									Second(4),
+									Second(5),
+									Second(6),
+									Second(7)
+								]
+							);
+
+							let a: &mut [u64; 8] = std::slice::from_raw_parts_mut(a_ptr.add(s), 8)
+								.try_into()
+								.unwrap();
+							let b: &mut [u64; 8] =
+								std::slice::from_raw_parts_mut(a_ptr.add(s + 8), 8)
+									.try_into()
+									.unwrap();
+							*a = *xr.as_array();
+							*b = *yr.as_array();
+						}
+					}
+
+					_ => {
+						for i in 0..m {
+							let omega = Simd::splat(*self.omegas.get_unchecked(k));
+							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
+							k += 1;
+
+							let s = 2 * i * l;
+
+							let (x, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
+							let (y, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
+							izip!(x, y).for_each(|(_x, _y)| {
+								let (xr, yr) = self.butterfly_simd::<8>(
+									Simd::from_slice(_x),
+									Simd::from_slice(_y),
+									omega,
+									omega_shoup,
+								);
+								*_x = *xr.as_array();
+								*_y = *yr.as_array();
+							});
+						}
+					}
+				}
+			}
+			l >>= 1;
+			m <<= 1;
+		}
+
+		// reduce x in [0, 4p) to [0, p)
+		let (x, _) = a.as_chunks_mut();
+		let p_twice = Simd::splat(self.p_twice);
+		let p = Simd::splat(self.p.p);
+		x.iter_mut().for_each(|v: &mut [u64; 8]| {
+			let mut _x = Simd::from_slice(v);
+			_x = _x.simd_min(_x - p_twice);
+			_x = _x.simd_min(_x - p);
+			*v = *_x.as_array();
+		});
+	}
+
 	pub fn backward_simd<const LANES: usize>(&self, a: &mut [u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
@@ -804,7 +1016,7 @@ mod tests {
 				if supports_ntt(p, size) {
 					let op = NttOperator::new(&q, size).unwrap();
 
-					for _ in 0..1 {
+					for _ in 0..100 {
 						let mut a = q.random_vec(size, &mut rng);
 						let a_clone = a.clone();
 						let mut b = a.clone();
@@ -812,7 +1024,7 @@ mod tests {
 						op.forward(&mut a);
 						assert_ne!(a, a_clone);
 
-						op.forward_simd(&mut b);
+						op.forward_simd_8(&mut b);
 						assert_eq!(a, b);
 					}
 				}

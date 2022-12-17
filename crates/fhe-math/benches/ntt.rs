@@ -8,7 +8,7 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 	group.sample_size(50);
 	let mut rng = thread_rng();
 
-	for vector_size in [1024usize, 4096, 1 << 32].iter() {
+	for vector_size in [1024usize, 4096].iter() {
 		for p in [4611686018326724609u64, 40961u64] {
 			let p_nbits = 64 - p.leading_zeros();
 			let q = Modulus::new(p).unwrap();

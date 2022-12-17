@@ -405,11 +405,8 @@ impl NttOperator {
 		(p.pow(a, n as u64) == 1) && (p.pow(a, (n / 2) as u64) != 1)
 	}
 
-	fn forward_simd<const LANES: usize>(&self, a: &mut [u64])
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		debug_assert!(LANES == 8);
+	pub fn forward_simd(&self, a: &mut [u64]) {
+		// debug_assert!(LANES == 8);
 
 		let n = self.size;
 		let a_ptr = a.as_mut_ptr();
@@ -459,7 +456,7 @@ impl NttOperator {
 					// 	}
 
 					// }
-					1 | 2 | 4 => {
+					1 => {
 						for i in 0..m {
 							let omega = *self.omegas.get_unchecked(k);
 							let omega_shoup = *self.omegas_shoup.get_unchecked(k);
@@ -477,6 +474,55 @@ impl NttOperator {
 							}
 						}
 					}
+					2 => {
+						for i in 0..m {
+							let omega = Simd::splat(*self.omegas.get_unchecked(k));
+							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
+							k += 1;
+
+							let s = 2 * i * l;
+
+							let (x, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
+							let (y, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
+							izip!(x, y).for_each(|(_x, _y)| {
+								let (xr, yr) = self.butterfly_simd::<2>(
+									Simd::from_slice(_x),
+									Simd::from_slice(_y),
+									omega,
+									omega_shoup,
+								);
+								*_x = *xr.as_array();
+								*_y = *yr.as_array();
+							});
+						}
+					}
+					4 => {
+						for i in 0..m {
+							let omega = Simd::splat(*self.omegas.get_unchecked(k));
+							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
+							k += 1;
+
+							let s = 2 * i * l;
+
+							let (x, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
+							let (y, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
+							izip!(x, y).for_each(|(_x, _y)| {
+								let (xr, yr) = self.butterfly_simd::<4>(
+									Simd::from_slice(_x),
+									Simd::from_slice(_y),
+									omega,
+									omega_shoup,
+								);
+								*_x = *xr.as_array();
+								*_y = *yr.as_array();
+							});
+						}
+					}
+
 					_ => {
 						for i in 0..m {
 							let omega = Simd::splat(*self.omegas.get_unchecked(k));
@@ -490,7 +536,7 @@ impl NttOperator {
 							let (y, _) =
 								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
 							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.butterfly_simd(
+								let (xr, yr) = self.butterfly_simd::<8>(
 									Simd::from_slice(_x),
 									Simd::from_slice(_y),
 									omega,
@@ -511,15 +557,15 @@ impl NttOperator {
 		let (x, _) = a.as_chunks_mut();
 		let p_twice = Simd::splat(self.p_twice);
 		let p = Simd::splat(self.p.p);
-		x.iter_mut().for_each(|v| {
+		x.iter_mut().for_each(|v: &mut [u64; 8]| {
 			let mut _x = Simd::from_slice(v);
-			_x = _x.simd_lt(p_twice).select(_x, _x - p_twice);
-			_x = _x.simd_lt(p).select(_x, _x - p);
+			_x = _x.simd_min(_x - p_twice);
+			_x = _x.simd_min(_x - p);
 			*v = *_x.as_array();
 		});
 	}
 
-	fn backward_simd<const LANES: usize>(&self, a: &mut [u64])
+	pub fn backward_simd<const LANES: usize>(&self, a: &mut [u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
@@ -766,7 +812,7 @@ mod tests {
 						op.forward(&mut a);
 						assert_ne!(a, a_clone);
 
-						op.forward_simd::<8>(&mut b);
+						op.forward_simd(&mut b);
 						assert_eq!(a, b);
 					}
 				}
@@ -787,7 +833,7 @@ mod tests {
 					for _ in 0..100 {
 						let mut a = q.random_vec(size, &mut rng);
 						let mut a_clone = a.clone();
-						op.forward_simd::<8>(&mut a);
+						op.forward_simd(&mut a);
 						assert_ne!(a_clone, a);
 
 						op.backward_simd::<8>(&mut a);
@@ -812,7 +858,7 @@ mod tests {
 						let mut a = q.random_vec(size, &mut rng);
 						let mut a_clone = a.clone();
 
-						op.forward_simd::<8>(&mut a);
+						op.forward_simd(&mut a);
 
 						op.backward_simd::<8>(&mut a);
 						assert_eq!(a_clone, a);

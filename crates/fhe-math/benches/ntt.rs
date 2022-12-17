@@ -39,6 +39,11 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 				BenchmarkId::new("forwardX__simd", format!("{}/{}", vector_size, p_nbits)),
 				|b| b.iter(|| op.forward_simd(&mut a)),
 			);
+
+			group.bench_function(
+				BenchmarkId::new("forwardX__simd8", format!("{}/{}", vector_size, p_nbits)),
+				|b| b.iter(|| op.forward_simd_8(&mut a)),
+			);
 		}
 	}
 

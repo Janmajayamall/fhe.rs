@@ -3,7 +3,8 @@
 use std::{
 	ops::BitAnd,
 	simd::{
-		simd_swizzle, LaneCount, Simd, SimdOrd, SimdPartialEq, SimdPartialOrd, SupportedLaneCount,
+		simd_swizzle, u64x8, LaneCount, Simd, SimdOrd, SimdPartialEq, SimdPartialOrd,
+		SupportedLaneCount,
 		Which::{First, Second},
 	},
 	vec,
@@ -581,44 +582,6 @@ impl NttOperator {
 		while l > 0 {
 			unsafe {
 				match l {
-					// FIXME
-					// 4 => {
-					// 	for i in 0..(m / 2) {
-					// let o1 = *self.omegas.get_unchecked(k);
-					// let o2 = *self.omegas.get_unchecked(k + 1);
-					// let os1 = *self.omegas.get_unchecked(k);
-					// let os2 = *self.omegas.get_unchecked(k + 1);
-					// k += 2;
-
-					// let omega = Simd::from_slice(&[o1, o1, o1, o1, o2, o2, o2, o2]);
-					// let omega_shoup =
-					// 	Simd::from_slice(&[os1, os1, os1, os1, os2, os2, os2, os2]);
-
-					// 		let s = i * 8;
-					// 		let x1 = std::slice::from_raw_parts_mut(a_ptr.add(s), 4);
-					// 		let x2 = std::slice::from_raw_parts_mut(a_ptr.add(s + 8), 4);
-					// 		let y1 = std::slice::from_raw_parts_mut(a_ptr.add(s + l), 4);
-					// 		let y2 = std::slice::from_raw_parts_mut(a_ptr.add(s + 8 + l), 4);
-
-					// 		let x = [&*x1, &*x2].concat();
-					// 		let y = [&*y1, &*y2].concat();
-
-					// 		let (xr, yr) = self.butterfly_simd(
-					// 			Simd::from_slice(x.as_slice()),
-					// 			Simd::from_slice(y.as_slice()),
-					// 			omega,
-					// 			omega_shoup,
-					// 		);
-					// 		let xr = xr.as_array();
-					// 		let yr = yr.as_array();
-
-					// 		x1.copy_from_slice(&xr[0..4]);
-					// 		x2.copy_from_slice(&xr[4..]);
-					// 		y1.copy_from_slice(&yr[0..4]);
-					// 		y2.copy_from_slice(&yr[4..]);
-					// 	}
-
-					// }
 					1 | 2 => {
 						for i in 0..m {
 							let omega = *self.omegas.get_unchecked(k);
@@ -645,26 +608,20 @@ impl NttOperator {
 							let os2 = *self.omegas_shoup.get_unchecked(k + 1);
 							k += 2;
 
-							let omega = Simd::from_slice(&[o1, o1, o1, o1, o2, o2, o2, o2]);
+							let omega = Simd::from_array([o1, o1, o1, o1, o2, o2, o2, o2]);
 							let omega_shoup =
-								Simd::from_slice(&[os1, os1, os1, os1, os2, os2, os2, os2]);
+								Simd::from_array([os1, os1, os1, os1, os2, os2, os2, os2]);
 
 							let s = 2 * i * 8;
 
-							let a: &[u64; 8] = std::slice::from_raw_parts(a_ptr.add(s), 8)
-								.try_into()
-								.unwrap();
-							let b: &[u64; 8] = std::slice::from_raw_parts(a_ptr.add(s + 8), 8)
-								.try_into()
-								.unwrap();
-
-							let a1 = Simd::from_array(*a);
-							let a2 = Simd::from_array(*b);
+							let a = u64x8::from_slice(std::slice::from_raw_parts(a_ptr.add(s), 8));
+							let b =
+								u64x8::from_slice(std::slice::from_raw_parts(a_ptr.add(s + 8), 8));
 
 							// shuffle
 							let x = simd_swizzle!(
-								a1,
-								a2,
+								a,
+								b,
 								[
 									First(0),
 									First(1),
@@ -677,8 +634,8 @@ impl NttOperator {
 								]
 							);
 							let y = simd_swizzle!(
-								a1,
-								a2,
+								a,
+								b,
 								[
 									First(4),
 									First(5),
@@ -694,44 +651,14 @@ impl NttOperator {
 							let (x, y) = self.butterfly_simd::<8>(x, y, omega, omega_shoup);
 
 							// shuffle back
-							let xr = simd_swizzle!(
-								x,
-								y,
-								[
-									First(0),
-									First(1),
-									First(2),
-									First(3),
-									Second(0),
-									Second(1),
-									Second(2),
-									Second(3)
-								]
-							);
-							let yr = simd_swizzle!(
-								x,
-								y,
-								[
-									First(4),
-									First(5),
-									First(6),
-									First(7),
-									Second(4),
-									Second(5),
-									Second(6),
-									Second(7)
-								]
-							);
+							let xr = x.as_array();
+							let yr = y.as_array();
 
-							let a: &mut [u64; 8] = std::slice::from_raw_parts_mut(a_ptr.add(s), 8)
-								.try_into()
-								.unwrap();
-							let b: &mut [u64; 8] =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + 8), 8)
-									.try_into()
-									.unwrap();
-							*a = *xr.as_array();
-							*b = *yr.as_array();
+							let view = std::slice::from_raw_parts_mut(a_ptr.add(s), 16);
+							view[..4].copy_from_slice(&xr[..4]);
+							view[4..8].copy_from_slice(&yr[..4]);
+							view[8..12].copy_from_slice(&xr[4..]);
+							view[12..].copy_from_slice(&yr[4..]);
 						}
 					}
 

@@ -422,44 +422,6 @@ impl NttOperator {
 		while l > 0 {
 			unsafe {
 				match l {
-					// FIXME
-					// 4 => {
-					// 	for i in 0..(m / 2) {
-					// 		let o1 = *self.omegas.get_unchecked(k);
-					// 		let o2 = *self.omegas.get_unchecked(k + 1);
-					// 		let os1 = *self.omegas.get_unchecked(k);
-					// 		let os2 = *self.omegas.get_unchecked(k + 1);
-					// 		k += 2;
-
-					// 		let omega = Simd::from_slice(&[o1, o1, o1, o1, o2, o2, o2, o2]);
-					// 		let omega_shoup =
-					// 			Simd::from_slice(&[os1, os1, os1, os1, os2, os2, os2, os2]);
-
-					// 		let s = i * 8;
-					// 		let x1 = std::slice::from_raw_parts_mut(a_ptr.add(s), 4);
-					// 		let x2 = std::slice::from_raw_parts_mut(a_ptr.add(s + 8), 4);
-					// 		let y1 = std::slice::from_raw_parts_mut(a_ptr.add(s + l), 4);
-					// 		let y2 = std::slice::from_raw_parts_mut(a_ptr.add(s + 8 + l), 4);
-
-					// 		let x = [&*x1, &*x2].concat();
-					// 		let y = [&*y1, &*y2].concat();
-
-					// 		let (xr, yr) = self.butterfly_simd(
-					// 			Simd::from_slice(x.as_slice()),
-					// 			Simd::from_slice(y.as_slice()),
-					// 			omega,
-					// 			omega_shoup,
-					// 		);
-					// 		let xr = xr.as_array();
-					// 		let yr = yr.as_array();
-
-					// 		x1.copy_from_slice(&xr[0..4]);
-					// 		x2.copy_from_slice(&xr[4..]);
-					// 		y1.copy_from_slice(&yr[0..4]);
-					// 		y2.copy_from_slice(&yr[4..]);
-					// 	}
-
-					// }
 					1 => {
 						for i in 0..m {
 							let omega = *self.omegas.get_unchecked(k);
@@ -484,12 +446,12 @@ impl NttOperator {
 							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
 							k += 1;
 
-							let s = 2 * i * l;
+							let s = 2 * i * 2;
 
 							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
+								std::slice::from_raw_parts_mut(a_ptr.add(s), 2).as_chunks_mut();
 							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
+								std::slice::from_raw_parts_mut(a_ptr.add(s + 2), 2).as_chunks_mut();
 							izip!(x, y).for_each(|(_x, _y)| {
 								let (xr, yr) = self.butterfly_simd::<2>(
 									Simd::from_slice(_x),
@@ -508,22 +470,21 @@ impl NttOperator {
 							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
 							k += 1;
 
-							let s = 2 * i * l;
+							let s = 2 * i * 4;
 
 							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
+								std::slice::from_raw_parts_mut(a_ptr.add(s), 4).as_chunks_mut();
 							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
-							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.butterfly_simd::<4>(
-									Simd::from_slice(_x),
-									Simd::from_slice(_y),
-									omega,
-									omega_shoup,
-								);
-								*_x = *xr.as_array();
-								*_y = *yr.as_array();
-							});
+								std::slice::from_raw_parts_mut(a_ptr.add(s + 4), 4).as_chunks_mut();
+
+							let (xr, yr) = self.butterfly_simd::<4>(
+								Simd::from_slice(&x[0]),
+								Simd::from_slice(&y[0]),
+								omega,
+								omega_shoup,
+							);
+							x[0] = *xr.as_array();
+							y[0] = *yr.as_array();
 						}
 					}
 
@@ -541,8 +502,8 @@ impl NttOperator {
 								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
 							izip!(x, y).for_each(|(_x, _y)| {
 								let (xr, yr) = self.butterfly_simd::<8>(
-									Simd::from_slice(_x),
-									Simd::from_slice(_y),
+									Simd::from_array(*_x),
+									Simd::from_array(*_y),
 									omega,
 									omega_shoup,
 								);
@@ -704,12 +665,7 @@ impl NttOperator {
 		});
 	}
 
-	pub fn backward_simd<const LANES: usize>(&self, a: &mut [u64])
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		debug_assert!(LANES == 8);
-
+	pub fn backward_simd(&self, a: &mut [u64]) {
 		let n = self.size;
 		let a_ptr = a.as_mut_ptr();
 
@@ -720,7 +676,7 @@ impl NttOperator {
 		while m > 0 {
 			unsafe {
 				match l {
-					1 | 2 | 4 => {
+					1 => {
 						for i in 0..m {
 							let zeta_inv = *self.zetas_inv.get_unchecked(k);
 							let zeta_inv_shoup = *self.zetas_inv_shoup.get_unchecked(k);
@@ -738,6 +694,52 @@ impl NttOperator {
 							}
 						}
 					}
+					2 => {
+						for i in 0..m {
+							let zeta_inv = Simd::splat(*self.zetas_inv.get_unchecked(k));
+							let zeta_inv_shoup =
+								Simd::splat(*self.zetas_inv_shoup.get_unchecked(k));
+							k += 1;
+
+							let s = 2 * i * 2;
+
+							let (x, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s), 2).as_chunks_mut();
+							let (y, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s + 2), 2).as_chunks_mut();
+							let (xr, yr) = self.inv_butterfly_simd::<2>(
+								Simd::from_array(x[0]),
+								Simd::from_array(y[0]),
+								zeta_inv,
+								zeta_inv_shoup,
+							);
+							x[0] = *xr.as_array();
+							y[0] = *yr.as_array();
+						}
+					}
+					4 => {
+						for i in 0..m {
+							let zeta_inv = Simd::splat(*self.zetas_inv.get_unchecked(k));
+							let zeta_inv_shoup =
+								Simd::splat(*self.zetas_inv_shoup.get_unchecked(k));
+							k += 1;
+
+							let s = 2 * i * 4;
+
+							let (x, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s), 4).as_chunks_mut();
+							let (y, _) =
+								std::slice::from_raw_parts_mut(a_ptr.add(s + 4), 4).as_chunks_mut();
+							let (xr, yr) = self.inv_butterfly_simd::<4>(
+								Simd::from_array(x[0]),
+								Simd::from_array(y[0]),
+								zeta_inv,
+								zeta_inv_shoup,
+							);
+							x[0] = *xr.as_array();
+							y[0] = *yr.as_array();
+						}
+					}
 					_ => {
 						for i in 0..m {
 							let zeta_inv = Simd::splat(*self.zetas_inv.get_unchecked(k));
@@ -747,20 +749,13 @@ impl NttOperator {
 
 							let s = 2 * i * l;
 
-							// let f_x = *a_ptr.add(s);
-							// let f_y = *a_ptr.add(s + l);
-
-							let (x, ws) =
+							let (x, _) =
 								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
-							let (y, ws1) =
+							let (y, _) =
 								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
-							// assert!(ws.len() + ws1.len() == 0);
-							// assert!(x.len() == y.len());
-							// assert!(f_x == x[0][0]);
-							// assert!(f_y == y[0][0]);
 
 							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.inv_butterfly_simd(
+								let (xr, yr) = self.inv_butterfly_simd::<8>(
 									Simd::from_slice(_x),
 									Simd::from_slice(_y),
 									zeta_inv,
@@ -785,19 +780,12 @@ impl NttOperator {
 		debug_assert!(x1.is_empty());
 		x.iter_mut().for_each(|v| {
 			let mut _x = Simd::from_slice(v);
-			_x = self.p.lazy_mul_shoup_simd(&_x, &size_inv, &size_inv_shoup);
+			_x = self
+				.p
+				.lazy_mul_shoup_simd::<8>(&_x, &size_inv, &size_inv_shoup);
 			_x = Modulus::reduce1_simd(&_x, &p);
 			*v = *_x.as_array();
 		});
-
-		// let (x0, x, x2) = a.as_simd_mut();
-		// assert!(x0.len() + x2.len() == 0);
-		// x.iter_mut().for_each(|_x| {
-		// 	// let mut _x = Simd::from_slice(v);
-		// 	*_x = self.p.lazy_mul_shoup_simd(&_x, &size_inv, &size_inv_shoup);
-		// 	*_x = Modulus::reduce1_simd(&_x, &p);
-		// 	// *v = *_x.as_array();
-		// });
 	}
 
 	fn butterfly_simd<const LANES: usize>(
@@ -812,7 +800,7 @@ impl NttOperator {
 	{
 		// reduce x to [0, 2p)
 		let p_twice = Simd::splat(self.p_twice);
-		x = x.simd_lt(p_twice).select(x, x - p_twice);
+		x = x.simd_min(x - p_twice);
 
 		let t = self.p.lazy_mul_shoup_simd(&(y), &w, &w_shoup);
 		y = x + p_twice - t;
@@ -975,7 +963,7 @@ mod tests {
 						op.forward_simd(&mut a);
 						assert_ne!(a_clone, a);
 
-						op.backward_simd::<8>(&mut a);
+						op.backward_simd(&mut a);
 						assert_eq!(a_clone, a);
 					}
 				}
@@ -999,7 +987,7 @@ mod tests {
 
 						op.forward_simd(&mut a);
 
-						op.backward_simd::<8>(&mut a);
+						op.backward_simd(&mut a);
 						assert_eq!(a_clone, a);
 
 						// let mut a_clone2 = a.clone();

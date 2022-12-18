@@ -16,7 +16,7 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 			let op = NttOperator::new(&Arc::new(q), *vector_size).unwrap();
 
 			group.bench_function(
-				BenchmarkId::new("forwardX", format!("{}/{}", vector_size, p_nbits)),
+				BenchmarkId::new("MEforward", format!("{}/{}", vector_size, p_nbits)),
 				|b| b.iter(|| op.forward(&mut a)),
 			);
 
@@ -26,7 +26,7 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 			);
 
 			group.bench_function(
-				BenchmarkId::new("backward", format!("{}/{}", vector_size, p_nbits)),
+				BenchmarkId::new("MEbackward", format!("{}/{}", vector_size, p_nbits)),
 				|b| b.iter(|| op.backward(&mut a)),
 			);
 
@@ -36,13 +36,18 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 			);
 
 			group.bench_function(
-				BenchmarkId::new("forwardX__simd", format!("{}/{}", vector_size, p_nbits)),
+				BenchmarkId::new("MEforward_simd", format!("{}/{}", vector_size, p_nbits)),
 				|b| b.iter(|| op.forward_simd(&mut a)),
 			);
 
 			group.bench_function(
-				BenchmarkId::new("forwardX__simd8", format!("{}/{}", vector_size, p_nbits)),
+				BenchmarkId::new("MEforward_simd8", format!("{}/{}", vector_size, p_nbits)),
 				|b| b.iter(|| op.forward_simd_8(&mut a)),
+			);
+
+			group.bench_function(
+				BenchmarkId::new("MEbackward_simd", format!("{}/{}", vector_size, p_nbits)),
+				|b| b.iter(|| op.backward_simd(&mut a)),
 			);
 		}
 	}

@@ -774,20 +774,20 @@ impl NttOperator {
 
 		let size_inv = Simd::splat(self.size_inv);
 		let size_inv_shoup = Simd::splat(self.size_inv_shoup);
-		let p = Simd::splat(self.p.p);
 
 		let (x, x1) = a.as_chunks_mut();
 		debug_assert!(x1.is_empty());
 		x.iter_mut().for_each(|v| {
-			let mut _x = Simd::from_slice(v);
+			let mut _x = Simd::from_array(*v);
 			_x = self
 				.p
-				.lazy_mul_shoup_simd::<8>(&_x, &size_inv, &size_inv_shoup);
-			_x = Modulus::reduce1_simd(&_x, &p);
+				.lazy_mul_shoup_simd::<8>(_x, size_inv, size_inv_shoup);
+			_x = _x.simd_min(_x - Simd::splat(self.p.p));
 			*v = *_x.as_array();
 		});
 	}
 
+	#[inline]
 	fn butterfly_simd<const LANES: usize>(
 		&self,
 		mut x: Simd<u64, LANES>,
@@ -802,13 +802,14 @@ impl NttOperator {
 		let p_twice = Simd::splat(self.p_twice);
 		x = x.simd_min(x - p_twice);
 
-		let t = self.p.lazy_mul_shoup_simd(&(y), &w, &w_shoup);
+		let t = self.p.lazy_mul_shoup_simd(y, w, w_shoup);
 		y = x + p_twice - t;
 		x += t;
 
 		(x, y)
 	}
 
+	#[inline]
 	fn inv_butterfly_simd<const LANES: usize>(
 		&self,
 		mut x: Simd<u64, LANES>,
@@ -826,7 +827,7 @@ impl NttOperator {
 		x += y;
 		x = x.simd_min(x - p_twice);
 
-		y = self.p.lazy_mul_shoup_simd(&(p_twice + t - y), &z, &z_shoup);
+		y = self.p.lazy_mul_shoup_simd((p_twice + t - y), z, z_shoup);
 
 		(x, y)
 	}

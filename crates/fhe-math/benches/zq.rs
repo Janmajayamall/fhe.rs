@@ -32,16 +32,6 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			b.iter(|| q.add_vec_simd::<8>(&mut a, &c))
 		});
 
-		group.bench_function(BenchmarkId::new("add_vec2_simd", vector_size), |b| {
-			let (a0, a1, a2) = a.as_simd_mut::<8>();
-			let (c0, c1, c2) = c.as_simd::<8>();
-			assert!(a0.len() + a2.len() == 0);
-
-			b.iter(|| {
-				q.add_simd_vec(a1, c1);
-			});
-		});
-
 		group.bench_function(BenchmarkId::new("sub_vec", vector_size), |b| {
 			b.iter(|| q.sub_vec(&mut a, &c));
 		});
@@ -71,34 +61,31 @@ pub fn zq_benchmark(c: &mut Criterion) {
 		});
 
 		group.bench_function(BenchmarkId::new("mul_vec_simd", vector_size), |b| {
-			let (a0, a1, a2) = a.as_simd_mut::<8>();
-			let (c0, c1, c2) = c.as_simd::<8>();
-
-			b.iter(|| q.mul_simd_vec(a1, c1));
+			b.iter(|| q.mul_vec_simd::<8>(&mut a, &c));
 		});
 
 		let ac = izip!(a.clone(), c.clone())
 			.map(|(_a, _c)| _a as u128 * _c as u128)
 			.collect_vec();
-		group.bench_function(BenchmarkId::new("reduce_opt_u128_simd", vector_size), |b| {
-			let low_mask = (1u128 << 64) - 1;
-			let mut ac2: (Vec<u64>, Vec<u64>) = ac
-				.iter()
-				.map(|v| ((v >> 64) as u64, (v & low_mask) as u64))
-				.unzip();
-			let (a_hi0, a_hi1, a_hi2) = ac2.0.as_simd_mut::<8>();
-			let (a_lo0, a_lo1, a_lo2) = ac2.1.as_simd_mut::<8>();
-			// assert!(a_hi0.len() + a_hi2.len() == 0);
+		group.bench_function(
+			BenchmarkId::new("reduce_opt_u128_vec_simd", vector_size),
+			|b| {
+				let low_mask = (1u128 << 64) - 1;
+				let mut ac: (Vec<u64>, Vec<u64>) = ac
+					.iter()
+					.map(|v| ((v >> 64) as u64, (v & low_mask) as u64))
+					.unzip();
 
-			b.iter(|| {
-				q.reduce_opt_u128_simd_vec(a_hi1, a_lo1);
-			});
-		});
+				b.iter(|| {
+					q.reduce_opt_u128_vec_simd::<8>(&mut ac.0, &ac.1);
+				});
+			},
+		);
 
 		group.bench_function(
 			BenchmarkId::new(
 				"
-		reduce_opt_u128",
+		reduce_opt_u128_vec",
 				vector_size,
 			),
 			|b| {
@@ -112,24 +99,14 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			},
 		);
 
-		group.bench_function(BenchmarkId::new("mul_hi", vector_size), |b| {
-			let (a_hi0, a_hi1, a_hi2) = a.as_simd_mut::<8>();
-			let (_, c_hi1, _) = c.as_simd::<8>();
-			b.iter(|| {
-				q.mulhi_simd_vec(a_hi1, c_hi1);
-			});
-		});
+		group.bench_function(
+			BenchmarkId::new("lazy_mul_shoup_vec_simd", vector_size),
+			|b| {
+				b.iter(|| q.lazy_mul_shoup_vec_simd::<8>(&mut a, &c, &c_shoup));
+			},
+		);
 
-		group.bench_function(BenchmarkId::new("lazy_mul_shoup_simd", vector_size), |b| {
-			let (a0, a1, a2) = a.as_simd_mut::<8>();
-			let (_, c1, _) = c.as_simd::<8>();
-			let (_, c_shoup1, _) = c_shoup.as_simd::<8>();
-			assert!(a0.len() + a2.len() == 0);
-			b.iter(|| q.lazy_mul_shoup_simd_vec(a1, c1, c_shoup1));
-		});
-
-		group.bench_function(BenchmarkId::new("lazy_mul_shoup", vector_size), |b| {
-			// let (a, c, c_shoup) = (a.clone(), c.clone(), c_shoup.clone());
+		group.bench_function(BenchmarkId::new("lazy_mul_shoup_vec", vector_size), |b| {
 			b.iter(|| {
 				izip!(a.iter(), c.iter(), c_shoup.iter()).for_each(|(a, c, c_shoup)| {
 					q.lazy_mul_shoup(*a, *c, *c_shoup);

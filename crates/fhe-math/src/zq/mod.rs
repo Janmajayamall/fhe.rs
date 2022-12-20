@@ -724,28 +724,18 @@ impl Modulus {
 		transcode_from_bytes(b, p_nbits)
 	}
 
-	pub fn reduce1_simd<const LANES: usize>(
-		a: &Simd<u64, LANES>,
-		p: &Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let a_minus_p = a - p;
-		a.simd_min(a_minus_p)
-	}
-
+	#[inline]
 	pub fn lazy_reduce_opt_u128_simd<const LANES: usize>(
 		&self,
-		a_hi: &Simd<u64, LANES>,
-		a_lo: &Simd<u64, LANES>,
+		a_hi: Simd<u64, LANES>,
+		a_lo: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		// qt = barret_lo * a_hi
 		let barret_lo = Simd::splat(self.barrett_lo);
-		let qt_hi = self.mulhi_simd(&barret_lo, a_hi);
+		let qt_hi = self.mulhi_simd(barret_lo, a_hi);
 		let qt_lo = barret_lo * a_hi;
 
 		// qb = a << 2^s0
@@ -762,35 +752,24 @@ impl Modulus {
 		a_lo - q_hi * Simd::splat(self.p)
 	}
 
-	pub fn reduce_opt_u128_simd<const LANES: usize>(
-		&self,
-		a_hi: &Simd<u64, LANES>,
-		a_lo: &Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
+	pub fn reduce_opt_u128_vec_simd<const LANES: usize>(&self, a_hi: &mut [u64], a_lo: &[u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let a = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
-		Self::reduce1_simd(&a, &Simd::splat(self.p))
-	}
-
-	pub fn reduce_opt_u128_simd_vec<const LANES: usize>(
-		&self,
-		a_hi: &mut [Simd<u64, LANES>],
-		a_lo: &[Simd<u64, LANES>],
-	) where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
 		debug_assert!(a_hi.len() == a_lo.len());
-		izip!(a_hi, a_lo).for_each(|(h, l)| {
-			*h = self.reduce_opt_u128_simd(h, l);
+		let (h, _) = a_hi.as_chunks_mut();
+		let (l, _) = a_lo.as_chunks();
+		izip!(h, l).for_each(|(h0, l0)| {
+			let res = self.lazy_reduce_opt_u128_simd(Simd::from_array(*h0), Simd::from_array(*l0));
+			*h0 = res.simd_min(res - Simd::splat(self.p)).to_array()
 		});
 	}
 
+	#[inline]
 	pub fn mulhi_simd<const LANES: usize>(
 		&self,
-		a: &Simd<u64, LANES>,
-		b: &Simd<u64, LANES>,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
@@ -825,67 +804,15 @@ impl Modulus {
 		c_hi
 	}
 
-	pub fn mulhi_simd_vec<const LANES: usize>(
-		&self,
-		a: &mut [Simd<u64, LANES>],
-		b: &[Simd<u64, LANES>],
-	) where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		izip!(a, b).for_each(|(a, b)| *a = self.mulhi_simd(a, b))
-	}
-
-	pub fn add_simd<const LANES: usize>(
-		&self,
-		a: &Simd<u64, LANES>,
-		b: &Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		Self::reduce1_simd(&(a + b), &Simd::splat(self.p))
-	}
-
-	pub fn sub_simd<const LANES: usize>(
-		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let p = Simd::splat(self.p);
-		Self::reduce1_simd(&(a + p - b), &p)
-	}
-
 	pub fn add_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let (a0, a1, a2) = a.as_simd_mut();
-		let (b0, b1, b2) = b.as_simd();
-
-		if a0.len() == b0.len() && a1.len() == b1.len() && a2.len() == b2.len() {
-			self.add_vec(a0, b0);
-			izip!(a1, b1).for_each(|(a, b)| {
-				*a = self.add_simd(a, b);
-			});
-			self.add_vec(a2, b2);
-		} else {
-			self.add_vec(a, b);
-		}
-	}
-
-	pub fn add_simd_vec<const LANES: usize>(
-		&self,
-		a: &mut [Simd<u64, LANES>],
-		b: &[Simd<u64, LANES>],
-	) where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		debug_assert!(a.len() == b.len());
-		izip!(a, b).for_each(|(a, b)| {
-			*a = self.add_simd(a, b);
+		let (a0, _) = a.as_chunks_mut();
+		let (b0, _) = b.as_chunks();
+		izip!(a0, b0).for_each(|(ai, bi)| {
+			let r = Simd::from_array(*ai) + Simd::from_array(*bi);
+			*ai = r.simd_min(r - Simd::splat(self.p)).to_array()
 		});
 	}
 
@@ -893,39 +820,37 @@ impl Modulus {
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let (a0, a1, a2) = a.as_simd_mut();
-		let (b0, b1, b2) = b.as_simd();
-
-		if a0.len() == b0.len() && a1.len() == b1.len() && a2.len() == b2.len() {
-			self.sub_vec(a0, b0);
-			izip!(a1, b1).for_each(|(a, b)| {
-				*a = self.sub_simd(*a, *b);
-			});
-			self.sub_vec(a2, b2);
-		} else {
-			self.sub_vec(a, b);
-		}
-	}
-
-	pub fn mul_simd_vec<const LANES: usize>(
-		&self,
-		a: &mut [Simd<u64, LANES>],
-		b: &[Simd<u64, LANES>],
-	) where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		izip!(a, b).for_each(|(_a, _b)| {
-			let r_hi = self.mulhi_simd(_a, _b);
-			let r_lo = *_a * *_b;
-			*_a = self.reduce_opt_u128_simd(&r_hi, &r_lo);
+		let (a0, _) = a.as_chunks_mut();
+		let (b0, _) = b.as_chunks();
+		izip!(a0, b0).for_each(|(ai, bi)| {
+			let r = Simd::from_array(*ai) - Simd::from_array(*bi);
+			*ai = r.simd_min(r - Simd::splat(self.p)).to_array()
 		});
 	}
 
+	pub fn mul_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let (a0, _) = a.as_chunks_mut();
+		let (b0, _) = b.as_chunks();
+		izip!(a0, b0).for_each(|(ai, bi)| {
+			let ais = Simd::from_array(*ai);
+			let bis = Simd::from_array(*bi);
+			let r_hi = self.mulhi_simd(ais, bis);
+			let r_lo = ais * bis;
+			// TODO: check whether this support opt barret reduction
+			let lazy_r = self.lazy_reduce_opt_u128_simd(r_hi, r_lo);
+			*ai = lazy_r.simd_min(lazy_r - Simd::splat(self.p)).to_array();
+		});
+	}
+
+	#[inline]
 	pub fn lazy_mul_shoup_simd<const LANES: usize>(
 		&self,
-		a: &Simd<u64, LANES>,
-		b: &Simd<u64, LANES>,
-		b_shoup: &Simd<u64, LANES>,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+		b_shoup: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
@@ -934,23 +859,32 @@ impl Modulus {
 		(a * b) - (q * Simd::splat(self.p))
 	}
 
-	pub fn lazy_mul_shoup_simd_vec<const LANES: usize>(
+	pub fn lazy_mul_shoup_vec_simd<const LANES: usize>(
 		&self,
-		a: &mut [Simd<u64, LANES>],
-		b: &[Simd<u64, LANES>],
-		b_shoup: &[Simd<u64, LANES>],
+		a: &mut [u64],
+		b: &[u64],
+		b_shoup: &[u64],
 	) where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		izip!(a, b, b_shoup).for_each(|(a, b, b_shoup)| {
-			*a = self.lazy_mul_shoup_simd(a, b, b_shoup);
+		let (a0, _) = a.as_chunks_mut();
+		let (b0, _) = b.as_chunks();
+		let (b_shoup0, _) = b_shoup.as_chunks();
+		izip!(a0, b0, b_shoup0).for_each(|(ai, bi, bsi)| {
+			*ai = self
+				.lazy_mul_shoup_simd(
+					Simd::from_array(*ai),
+					Simd::from_array(*bi),
+					Simd::from_array(*bsi),
+				)
+				.to_array();
 		});
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use std::simd::Simd;
+	use std::simd::{Simd, SimdOrd};
 
 	use super::primes::generate_prime;
 	use super::{primes, Modulus};
@@ -1341,14 +1275,15 @@ mod tests {
 			.map(|(_a, _b, _b_shoup)| q.mul_shoup(*_a, *_b, *_b_shoup))
 			.collect_vec();
 
-		let product_simd = q.lazy_mul_shoup_simd::<8>(
-			&Simd::from_slice(a),
-			&Simd::from_slice(b),
-			&Simd::from_slice(b_shoup.as_slice()),
+		let mut product_simd = q.lazy_mul_shoup_simd::<8>(
+			Simd::from_slice(a),
+			Simd::from_slice(b),
+			Simd::from_slice(b_shoup.as_slice()),
 		);
-		let tmp = Modulus::reduce1_simd(&product_simd, &Simd::splat(q.p));
+		// reduce [0, 2p) -> [0, p)
+		product_simd = product_simd.simd_min(product_simd - Simd::splat(q.p));
 
-		assert_eq!(product, tmp.as_array());
+		assert_eq!(product, product_simd.as_array());
 	}
 
 	#[test]
@@ -1364,19 +1299,12 @@ mod tests {
 			.take(2048)
 			.collect_vec();
 
-		let mut tmp = a.iter().map(|v| (v >> 64) as u64).collect_vec();
-		let (a_hi0, a_hi1, a_hi2) = tmp.as_simd_mut::<LANES>();
-		let mut tmp = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
-		let (a_lo0, a_lo1, a_lo2) = tmp.as_simd_mut::<LANES>();
-
-		assert!(a_hi0.len() + a_hi2.len() == 0);
+		let mut hi = a.iter().map(|v| (v >> 64) as u64).collect_vec();
+		let mut lo = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
 
 		let mut now = std::time::Instant::now();
-		let res = izip!(a_hi1, a_lo1)
-			.map(|(h, l)| q_mod.reduce_opt_u128_simd(h, l))
-			.collect_vec();
+		q_mod.reduce_opt_u128_vec_simd::<LANES>(&mut hi, &lo);
 		println!("SIMD took: {:?}", now.elapsed());
-		let reduced_simd = res.iter().flat_map(|v| v.as_array().to_vec()).collect_vec();
 
 		now = std::time::Instant::now();
 		let reduced = a
@@ -1385,7 +1313,7 @@ mod tests {
 			.collect_vec();
 		println!("Normal took: {:?}", now.elapsed());
 
-		assert_eq!(reduced_simd, reduced);
+		assert_eq!(hi, reduced);
 	}
 
 	#[test]

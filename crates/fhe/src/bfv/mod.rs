@@ -22,4 +22,8 @@ pub use ops::{dot_product_scalar, Multiplicator};
 pub use parameters::{BfvParameters, BfvParametersBuilder};
 pub use plaintext::Plaintext;
 pub use plaintext_vec::PlaintextVec;
+pub use proto::bfv::{
+	EvaluationKey as EvaluationKeyProto, GaloisKey as GaloisKeyProto, PublicKey as PublicKeyProto,
+	RelinearizationKey as RelinearizationKeyProto,
+};
 pub use rgsw_ciphertext::RGSWCiphertext;

@@ -12,36 +12,45 @@ use num_traits::cast::ToPrimitive;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
 use std::{
 	ops::{BitAnd, Mul, Shl, Shr},
-	simd::{
-		simd_swizzle, LaneCount, Mask, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount, ToBitMask,
-	},
+	simd::{simd_swizzle, LaneCount, Simd, SimdOrd, SimdPartialOrd, SupportedLaneCount},
 };
 
 macro_rules! lane_unroll {
-	($self:ident, $op:ident, $n:expr,  $a:expr, $b:expr) => {
-		macro_rules! work {
+	($self:ident, $op:ident, $n:expr,  $a:expr, $($b:expr, $b0: ident, $bi: ident),*) => {
+		macro_rules! tmp {
 			($lane:literal) => {
 				let (a0, _) = $a.as_chunks_mut();
-				let (b0, _) = $b.as_chunks();
-				a0.iter_mut().zip(b0.iter()).for_each(|(ai, bi)| {
+				$(
+					let ($b0, _) = $b.as_chunks();
+				)*
+				izip!(
+					a0,
+					$(
+						$b0,
+					)*
+				).for_each(|(ai, $(
+					$bi,
+				)*)| {
 					*ai = $self
-						.$op::<$lane>(Simd::from_array(*ai), Simd::from_array(*bi))
+						.$op::<$lane>(Simd::from_array(*ai), $(
+							Simd::from_array(*$bi),
+						)*)
 						.to_array();
 				});
 			};
 		}
 		match $n {
 			8 => {
-				work!(8);
+				tmp!(8);
 			}
 			16 => {
-				work!(16);
+				tmp!(16);
 			}
 			32 => {
-				work!(32);
+				tmp!(32);
 			}
 			_ => {
-				work!(64);
+				tmp!(64);
 			}
 		}
 	};
@@ -834,18 +843,6 @@ impl Modulus {
 		c_hi
 	}
 
-	pub fn add_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let (a0, _) = a.as_chunks_mut();
-		let (b0, _) = b.as_chunks();
-		izip!(a0, b0).for_each(|(ai, bi)| {
-			let r = Simd::from_array(*ai) + Simd::from_array(*bi);
-			*ai = r.simd_min(r - Simd::splat(self.p)).to_array()
-		});
-	}
-
 	#[inline]
 	pub fn add_simd<const LANES: usize>(
 		&self,
@@ -859,37 +856,33 @@ impl Modulus {
 		c.simd_min(c - Simd::splat(self.p))
 	}
 
-	pub fn add_vec_simd2(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, add_simd, n, a, b);
-	}
-
-	pub fn sub_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	#[inline]
+	pub fn sub_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let (a0, _) = a.as_chunks_mut();
-		let (b0, _) = b.as_chunks();
-		izip!(a0, b0).for_each(|(ai, bi)| {
-			let r = Simd::from_array(*ai) - Simd::from_array(*bi);
-			*ai = r.simd_min(r - Simd::splat(self.p)).to_array()
-		});
+		let c = a - b;
+		c.simd_min(c - Simd::splat(self.p))
 	}
 
-	pub fn mul_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])
+	#[inline]
+	pub fn mul_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let (a0, _) = a.as_chunks_mut();
-		let (b0, _) = b.as_chunks();
-		izip!(a0, b0).for_each(|(ai, bi)| {
-			let ais = Simd::from_array(*ai);
-			let bis = Simd::from_array(*bi);
-			let r_hi = self.mulhi_simd(ais, bis);
-			let r_lo = ais * bis;
-			// TODO: check whether this support opt barret reduction
-			let lazy_r = self.lazy_reduce_opt_u128_simd(r_hi, r_lo);
-			*ai = lazy_r.simd_min(lazy_r - Simd::splat(self.p)).to_array();
-		});
+		let r_hi = self.mulhi_simd(a, b);
+		let r_lo = a * b;
+		// TODO: check whether this support opt barret reduction
+		let r = self.lazy_reduce_opt_u128_simd(r_hi, r_lo);
+		r.simd_min(r - Simd::splat(self.p))
 	}
 
 	#[inline]
@@ -906,26 +899,20 @@ impl Modulus {
 		(a * b) - (q * Simd::splat(self.p))
 	}
 
-	pub fn lazy_mul_shoup_vec_simd<const LANES: usize>(
-		&self,
-		a: &mut [u64],
-		b: &[u64],
-		b_shoup: &[u64],
-	) where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let (a0, _) = a.as_chunks_mut();
-		let (b0, _) = b.as_chunks();
-		let (b_shoup0, _) = b_shoup.as_chunks();
-		izip!(a0, b0, b_shoup0).for_each(|(ai, bi, bsi)| {
-			*ai = self
-				.lazy_mul_shoup_simd(
-					Simd::from_array(*ai),
-					Simd::from_array(*bi),
-					Simd::from_array(*bsi),
-				)
-				.to_array();
-		});
+	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+		lane_unroll!(self, add_simd, n, a, b, b0, bi);
+	}
+
+	pub fn sub_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+		lane_unroll!(self, sub_simd, n, a, b, b0, bi);
+	}
+
+	pub fn mul_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+		lane_unroll!(self, mul_simd, n, a, b, b0, bi);
+	}
+
+	pub fn lazy_mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
+		lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
 	}
 }
 

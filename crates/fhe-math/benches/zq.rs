@@ -1,5 +1,5 @@
 #![feature(portable_simd)]
-use std::{iter, simd::Simd};
+use std::{iter, simd::Simd, vec};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fhe_math::zq::Modulus;
@@ -29,18 +29,15 @@ pub fn zq_benchmark(c: &mut Criterion) {
 		});
 
 		group.bench_function(BenchmarkId::new("add_vec_simd", vector_size), |b| {
-			b.iter(|| q.add_vec_simd::<8>(&mut a, &c))
+			b.iter(|| q.add_vec_simd(&mut a, &c, *vector_size))
 		});
 
-		group.bench_function(BenchmarkId::new("add_vec_simd2", vector_size), |b| {
-			b.iter(|| q.add_vec_simd2(&mut a, &c, *vector_size))
-		});
 		group.bench_function(BenchmarkId::new("sub_vec", vector_size), |b| {
 			b.iter(|| q.sub_vec(&mut a, &c));
 		});
 
 		group.bench_function(BenchmarkId::new("sub_vec_simd", vector_size), |b| {
-			b.iter(|| q.sub_vec_simd::<8>(&mut a, &c))
+			b.iter(|| q.sub_vec_simd(&mut a, &c, *vector_size))
 		});
 
 		group.bench_function(BenchmarkId::new("neg_vec", vector_size), |b| {
@@ -64,7 +61,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 		});
 
 		group.bench_function(BenchmarkId::new("mul_vec_simd", vector_size), |b| {
-			b.iter(|| q.mul_vec_simd::<8>(&mut a, &c));
+			b.iter(|| q.mul_vec_simd(&mut a, &c, *vector_size));
 		});
 
 		let ac = izip!(a.clone(), c.clone())
@@ -105,7 +102,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 		group.bench_function(
 			BenchmarkId::new("lazy_mul_shoup_vec_simd", vector_size),
 			|b| {
-				b.iter(|| q.lazy_mul_shoup_vec_simd::<8>(&mut a, &c, &c_shoup));
+				b.iter(|| q.lazy_mul_shoup_vec_simd(&mut a, &c, &c_shoup, *vector_size));
 			},
 		);
 

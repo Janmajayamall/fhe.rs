@@ -32,6 +32,9 @@ sha2.workspace = true
 criterion.workspace = true
 proptest.workspace = true
 
+[features]
+simd = []
+
 [[bench]]
 name = "zq"
 harness = false

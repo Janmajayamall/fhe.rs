@@ -870,6 +870,14 @@ impl Modulus {
 	}
 
 	#[inline]
+	pub fn neg_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		a.simd_min(a - Simd::splat(self.p))
+	}
+
+	#[inline]
 	pub fn mul_simd<const LANES: usize>(
 		&self,
 		a: Simd<u64, LANES>,
@@ -899,6 +907,20 @@ impl Modulus {
 		(a * b) - (q * Simd::splat(self.p))
 	}
 
+	#[inline]
+	pub fn mul_shoup_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+		b_shoup: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let r = self.lazy_mul_shoup_simd(a, b, b_shoup);
+		r.simd_min(r - Simd::splat(self.p))
+	}
+
 	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
 		lane_unroll!(self, add_simd, n, a, b, b0, bi);
 	}
@@ -907,12 +929,21 @@ impl Modulus {
 		lane_unroll!(self, sub_simd, n, a, b, b0, bi);
 	}
 
+	pub fn neg_vec_simd(&self, a: &mut [u64], n: usize) {
+		// lane_unroll!(self, neg_simd, n, a, a, b0, bi);
+		todo!()
+	}
+
 	pub fn mul_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
 		lane_unroll!(self, mul_simd, n, a, b, b0, bi);
 	}
 
 	pub fn lazy_mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+	}
+
+	pub fn mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
+		lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
 	}
 
 	pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {

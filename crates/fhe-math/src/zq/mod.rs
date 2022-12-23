@@ -28,12 +28,12 @@ macro_rules! lane_unroll {
 					$(
 						$b0,
 					)*
-				).for_each(|(ai, $(
-					$bi,
+				).for_each(|(ai $(
+					,$bi
 				)*)| {
 					*ai = $self
-						.$op::<$lane>(Simd::from_array(*ai), $(
-							Simd::from_array(*$bi),
+						.$op::<$lane>(Simd::from_array(*ai) $(
+							,Simd::from_array(*$bi)
 						)*)
 						.to_array();
 				});
@@ -865,7 +865,7 @@ impl Modulus {
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		let c = a - b;
+		let c = a + self.neg_simd(b);
 		c.simd_min(c - Simd::splat(self.p))
 	}
 
@@ -874,7 +874,9 @@ impl Modulus {
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		a.simd_min(a - Simd::splat(self.p))
+		let p = Simd::splat(self.p);
+		let n = p - a;
+		n.simd_min(n - p)
 	}
 
 	#[inline]
@@ -930,8 +932,7 @@ impl Modulus {
 	}
 
 	pub fn neg_vec_simd(&self, a: &mut [u64], n: usize) {
-		// lane_unroll!(self, neg_simd, n, a, a, b0, bi);
-		todo!()
+		lane_unroll!(self, neg_simd, n, a,);
 	}
 
 	pub fn mul_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {

@@ -44,6 +44,10 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			b.iter(|| q.neg_vec(&mut a));
 		});
 
+		group.bench_function(BenchmarkId::new("neg_vec_simd", vector_size), |b| {
+			b.iter(|| q.neg_vec_simd(&mut a, *vector_size));
+		});
+
 		group.bench_function(BenchmarkId::new("mul_vec", vector_size), |b| {
 			b.iter(|| q.mul_vec(&mut a, &c));
 		});

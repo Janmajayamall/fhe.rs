@@ -207,16 +207,29 @@ impl NttOperator {
 			for i in 0..m {
 				let s = 2 * i * l;
 				unsafe {
-					lane_unroll!(
-						self,
-						inv_butterfly_simd,
-						zetas_inv,
-						zetas_inv_shoup,
-						l,
-						m,
-						k,
-						a_ptr
-					);
+					let zeta_inv = *self.zetas_inv.get_unchecked(k);
+					let zeta_inv_shoup = *self.zetas_inv_shoup.get_unchecked(k);
+					k += 1;
+					match l {
+						1 => {
+							self.inv_butterfly(
+								&mut *a_ptr.add(s),
+								&mut *a_ptr.add(s + l),
+								zeta_inv,
+								zeta_inv_shoup,
+							);
+						}
+						_ => {
+							for j in s..(s + l) {
+								self.inv_butterfly(
+									&mut *a_ptr.add(j),
+									&mut *a_ptr.add(j + l),
+									zeta_inv,
+									zeta_inv_shoup,
+								);
+							}
+						}
+					}
 				}
 			}
 			l <<= 1;
@@ -623,99 +636,18 @@ impl NttOperator {
 
 		while m > 0 {
 			unsafe {
-				match l {
-					1 => {
-						for i in 0..m {
-							let zeta_inv = *self.zetas_inv.get_unchecked(k);
-							let zeta_inv_shoup = *self.zetas_inv_shoup.get_unchecked(k);
-							k += 1;
-
-							let s = 2 * i * l;
-
-							for j in s..(s + l) {
-								self.inv_butterfly(
-									&mut *a_ptr.add(j),
-									&mut *a_ptr.add(j + l),
-									zeta_inv,
-									zeta_inv_shoup,
-								);
-							}
-						}
-					}
-					2 => {
-						for i in 0..m {
-							let zeta_inv = Simd::splat(*self.zetas_inv.get_unchecked(k));
-							let zeta_inv_shoup =
-								Simd::splat(*self.zetas_inv_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * 2;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), 2).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + 2), 2).as_chunks_mut();
-							let (xr, yr) = self.inv_butterfly_simd::<2>(
-								Simd::from_array(x[0]),
-								Simd::from_array(y[0]),
-								zeta_inv,
-								zeta_inv_shoup,
-							);
-							x[0] = *xr.as_array();
-							y[0] = *yr.as_array();
-						}
-					}
-					4 => {
-						for i in 0..m {
-							let zeta_inv = Simd::splat(*self.zetas_inv.get_unchecked(k));
-							let zeta_inv_shoup =
-								Simd::splat(*self.zetas_inv_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * 4;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), 4).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + 4), 4).as_chunks_mut();
-							let (xr, yr) = self.inv_butterfly_simd::<4>(
-								Simd::from_array(x[0]),
-								Simd::from_array(y[0]),
-								zeta_inv,
-								zeta_inv_shoup,
-							);
-							x[0] = *xr.as_array();
-							y[0] = *yr.as_array();
-						}
-					}
-					_ => {
-						for i in 0..m {
-							let zeta_inv = Simd::splat(*self.zetas_inv.get_unchecked(k));
-							let zeta_inv_shoup =
-								Simd::splat(*self.zetas_inv_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * l;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
-
-							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.inv_butterfly_simd::<8>(
-									Simd::from_slice(_x),
-									Simd::from_slice(_y),
-									zeta_inv,
-									zeta_inv_shoup,
-								);
-								*_x = *xr.as_array();
-								*_y = *yr.as_array();
-							});
-						}
-					}
-				}
+				lane_unroll!(
+					self,
+					inv_butterfly_simd,
+					zetas_inv,
+					zetas_inv_shoup,
+					l,
+					m,
+					k,
+					a_ptr
+				);
 			}
+
 			l <<= 1;
 			m >>= 1;
 		}

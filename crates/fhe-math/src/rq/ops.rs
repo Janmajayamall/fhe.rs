@@ -208,12 +208,14 @@ impl MulAssign<&Poly> for Poly {
 				izip!(
 					self.coefficients.outer_iter_mut(),
 					p.coefficients.outer_iter(),
+					p.coefficients_shoup.as_ref().unwrap().outer_iter(),
 					self.ctx.q.iter()
 				)
-				.for_each(|(mut v1, v2, qi)| {
+				.for_each(|(mut v1, v2, v2_shoup, qi)| {
 					qi.mul_shoup_vec_simd(
 						v1.as_slice_mut().unwrap(),
 						v2.as_slice().unwrap(),
+						v2_shoup.as_slice().unwrap(),
 						self.ctx.degree,
 					)
 				});
@@ -248,6 +250,7 @@ impl MulAssign<&Poly> for Poly {
 						)
 					});
 				}
+
 				self.has_lazy_coefficients = false
 			}
 			_ => {
@@ -341,13 +344,13 @@ impl Neg for &Poly {
 
 	fn neg(self) -> Poly {
 		assert!(!self.has_lazy_coefficients);
+		let mut out = self.clone();
 
 		#[cfg(feature = "simd")]
 		izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter())
-			.for_each(|(mut v1, qi)| qi.neg_vec_simd(v1.as_slice_mut().unwrap()));
+			.for_each(|(mut v1, qi)| qi.neg_vec_simd(v1.as_slice_mut().unwrap(), out.ctx.degree));
 
 		#[cfg(not(feature = "simd"))]
-		let mut out = self.clone();
 		if self.allow_variable_time_computations {
 			izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter())
 				.for_each(|(mut v1, qi)| unsafe { qi.neg_vec_vt(v1.as_slice_mut().unwrap()) });
@@ -366,8 +369,8 @@ impl Neg for Poly {
 		assert!(!self.has_lazy_coefficients);
 
 		#[cfg(feature = "simd")]
-		izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter())
-			.for_each(|(mut v1, qi)| qi.neg_vec_simd(v1.as_slice_mut().unwrap()));
+		izip!(self.coefficients.outer_iter_mut(), self.ctx.q.iter())
+			.for_each(|(mut v1, qi)| qi.neg_vec_simd(v1.as_slice_mut().unwrap(), self.ctx.degree));
 
 		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {

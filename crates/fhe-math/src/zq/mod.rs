@@ -791,17 +791,17 @@ impl Modulus {
 		a_lo - q_hi * Simd::splat(self.p)
 	}
 
-	pub fn reduce_opt_u128_vec_simd<const LANES: usize>(&self, a_hi: &mut [u64], a_lo: &[u64])
+	#[inline]
+	pub fn reduce_opt_u128_simd<const LANES: usize>(
+		&self,
+		a_hi: Simd<u64, LANES>,
+		a_lo: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		debug_assert!(a_hi.len() == a_lo.len());
-		let (h, _) = a_hi.as_chunks_mut();
-		let (l, _) = a_lo.as_chunks();
-		izip!(h, l).for_each(|(h0, l0)| {
-			let res = self.lazy_reduce_opt_u128_simd(Simd::from_array(*h0), Simd::from_array(*l0));
-			*h0 = res.simd_min(res - Simd::splat(self.p)).to_array()
-		});
+		let r = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
+		r.simd_min(r - Simd::splat(self.p))
 	}
 
 	#[inline]
@@ -913,6 +913,10 @@ impl Modulus {
 
 	pub fn lazy_mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+	}
+
+	pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+		lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
 	}
 }
 
@@ -1337,7 +1341,7 @@ mod tests {
 		let mut lo = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
 
 		let mut now = std::time::Instant::now();
-		q_mod.reduce_opt_u128_vec_simd::<LANES>(&mut hi, &lo);
+		q_mod.reduce_opt_u128_vec_simd(&mut hi, &lo, 2048);
 		println!("SIMD took: {:?}", now.elapsed());
 
 		now = std::time::Instant::now();

@@ -17,6 +17,36 @@ use std::{
 	},
 };
 
+macro_rules! lane_unroll {
+	($self:ident, $op:ident, $n:expr,  $a:expr, $b:expr) => {
+		macro_rules! work {
+			($lane:literal) => {
+				let (a0, _) = $a.as_chunks_mut();
+				let (b0, _) = $b.as_chunks();
+				a0.iter_mut().zip(b0.iter()).for_each(|(ai, bi)| {
+					*ai = $self
+						.$op::<$lane>(Simd::from_array(*ai), Simd::from_array(*bi))
+						.to_array();
+				});
+			};
+		}
+		match $n {
+			8 => {
+				work!(8);
+			}
+			16 => {
+				work!(16);
+			}
+			32 => {
+				work!(32);
+			}
+			_ => {
+				work!(64);
+			}
+		}
+	};
+}
+
 /// Structure encapsulating an integer modulus up to 62 bits.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Modulus {
@@ -814,6 +844,23 @@ impl Modulus {
 			let r = Simd::from_array(*ai) + Simd::from_array(*bi);
 			*ai = r.simd_min(r - Simd::splat(self.p)).to_array()
 		});
+	}
+
+	#[inline]
+	pub fn add_simd<const LANES: usize>(
+		&self,
+		a: Simd<u64, LANES>,
+		b: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let c = a + b;
+		c.simd_min(c - Simd::splat(self.p))
+	}
+
+	pub fn add_vec_simd2(&self, a: &mut [u64], b: &[u64], n: usize) {
+		lane_unroll!(self, add_simd, n, a, b);
 	}
 
 	pub fn sub_vec_simd<const LANES: usize>(&self, a: &mut [u64], b: &[u64])

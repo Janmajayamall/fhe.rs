@@ -41,6 +41,58 @@ pub struct NttOperator {
 	size_inv_shoup: u64,
 }
 
+macro_rules! lane_unroll {
+	($self:ident, $op:ident, $roots:ident, $roots_shoup:ident, $l:expr, $m:expr, $k:expr, $a_ptr:expr) => {
+		macro_rules! tmp {
+			($lane:literal) => {
+				for i in 0..$m {
+					let omega = Simd::splat(*$self.$roots.get_unchecked($k));
+					let omega_shoup = Simd::splat(*$self.$roots_shoup.get_unchecked($k));
+					$k += 1;
+
+					let s = 2 * i * $l;
+
+					let (x, _) = std::slice::from_raw_parts_mut($a_ptr.add(s), $l).as_chunks_mut();
+					let (y, _) =
+						std::slice::from_raw_parts_mut($a_ptr.add(s + $l), $l).as_chunks_mut();
+					izip!(x, y).for_each(|(_x, _y)| {
+						let (xr, yr) = $self.$op::<$lane>(
+							Simd::from_array(*_x),
+							Simd::from_array(*_y),
+							omega,
+							omega_shoup,
+						);
+						*_x = *xr.as_array();
+						*_y = *yr.as_array();
+					});
+				}
+			};
+		}
+
+		match $l {
+			1 => {
+				tmp!(1)
+			}
+			2 => {
+				tmp!(2)
+			}
+			4 => {
+				tmp!(4)
+			}
+			8 => {
+				tmp!(8)
+			}
+			16 => {
+				tmp!(16)
+			}
+			32 => {
+				tmp!(32)
+			}
+			_ => tmp!(64),
+		}
+	};
+}
+
 impl NttOperator {
 	/// Create an NTT operator given a modulus for a specific size.
 	///
@@ -155,29 +207,16 @@ impl NttOperator {
 			for i in 0..m {
 				let s = 2 * i * l;
 				unsafe {
-					let zeta_inv = *self.zetas_inv.get_unchecked(k);
-					let zeta_inv_shoup = *self.zetas_inv_shoup.get_unchecked(k);
-					k += 1;
-					match l {
-						// 1 => {
-						// 	self.inv_butterfly(
-						// 		&mut *a_ptr.add(s),
-						// 		&mut *a_ptr.add(s + l),
-						// 		zeta_inv,
-						// 		zeta_inv_shoup,
-						// 	);
-						// }
-						_ => {
-							for j in s..(s + l) {
-								self.inv_butterfly(
-									&mut *a_ptr.add(j),
-									&mut *a_ptr.add(j + l),
-									zeta_inv,
-									zeta_inv_shoup,
-								);
-							}
-						}
-					}
+					lane_unroll!(
+						self,
+						inv_butterfly_simd,
+						zetas_inv,
+						zetas_inv_shoup,
+						l,
+						m,
+						k,
+						a_ptr
+					);
 				}
 			}
 			l <<= 1;
@@ -421,98 +460,7 @@ impl NttOperator {
 
 		while l > 0 {
 			unsafe {
-				match l {
-					1 => {
-						for i in 0..m {
-							let omega = *self.omegas.get_unchecked(k);
-							let omega_shoup = *self.omegas_shoup.get_unchecked(k);
-							k += 1;
-
-							let s = 2 * i * l;
-
-							for j in s..s + l {
-								self.butterfly(
-									&mut *a_ptr.add(j),
-									&mut *a_ptr.add(j + l),
-									omega,
-									omega_shoup,
-								);
-							}
-						}
-					}
-					2 => {
-						for i in 0..m {
-							let omega = Simd::splat(*self.omegas.get_unchecked(k));
-							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * 2;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), 2).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + 2), 2).as_chunks_mut();
-							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.butterfly_simd::<2>(
-									Simd::from_slice(_x),
-									Simd::from_slice(_y),
-									omega,
-									omega_shoup,
-								);
-								*_x = *xr.as_array();
-								*_y = *yr.as_array();
-							});
-						}
-					}
-					4 => {
-						for i in 0..m {
-							let omega = Simd::splat(*self.omegas.get_unchecked(k));
-							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * 4;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), 4).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + 4), 4).as_chunks_mut();
-
-							let (xr, yr) = self.butterfly_simd::<4>(
-								Simd::from_slice(&x[0]),
-								Simd::from_slice(&y[0]),
-								omega,
-								omega_shoup,
-							);
-							x[0] = *xr.as_array();
-							y[0] = *yr.as_array();
-						}
-					}
-
-					_ => {
-						for i in 0..m {
-							let omega = Simd::splat(*self.omegas.get_unchecked(k));
-							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * l;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
-							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.butterfly_simd::<8>(
-									Simd::from_array(*_x),
-									Simd::from_array(*_y),
-									omega,
-									omega_shoup,
-								);
-								*_x = *xr.as_array();
-								*_y = *yr.as_array();
-							});
-						}
-					}
-				}
+				lane_unroll!(self, butterfly_simd, omegas, omegas_shoup, l, m, k, a_ptr);
 			}
 			l >>= 1;
 			m <<= 1;
@@ -530,7 +478,7 @@ impl NttOperator {
 		});
 	}
 
-	pub fn forward_simd_8(&self, a: &mut [u64]) {
+	pub fn forward_simd_swizzle(&self, a: &mut [u64]) {
 		// debug_assert!(LANES == 8);
 
 		let n = self.size;
@@ -940,7 +888,7 @@ mod tests {
 						op.forward(&mut a);
 						assert_ne!(a, a_clone);
 
-						op.forward_simd_8(&mut b);
+						op.forward_simd(&mut b);
 						assert_eq!(a, b);
 					}
 				}

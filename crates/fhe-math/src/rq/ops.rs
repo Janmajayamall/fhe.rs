@@ -540,7 +540,7 @@ mod tests {
 	use super::dot_product;
 	use crate::{
 		rq::{Context, Poly, Representation},
-		zq::Modulus,
+		zq::{primes::supports_opt, Modulus},
 	};
 	use std::{error::Error, sync::Arc};
 

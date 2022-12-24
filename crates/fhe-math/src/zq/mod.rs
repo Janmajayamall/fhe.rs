@@ -790,8 +790,8 @@ impl Modulus {
 	#[inline]
 	pub fn lazy_reduce_u128_simd<const LANES: usize>(
 		&self,
-		a_lo: Simd<u64, LANES>,
 		a_hi: Simd<u64, LANES>,
+		a_lo: Simd<u64, LANES>,
 	) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
@@ -799,11 +799,10 @@ impl Modulus {
 		let barret_lo = Simd::splat(self.barrett_lo);
 		let barret_hi = Simd::splat(self.barrett_hi);
 
-		// q = ((a_lo + 2^64 a_hi) * (b_lo + 2^64 b_hi)) >> 128
-		// q = ((a_lo * b_lo) >> 64 + (a_lo * b_hi) + (b_lo * a_hi)) >> 64 + (a_hi *
-		// b_hi)
+		// => q = ((a_lo + 2^64 a_hi) * (b_lo + 2^64 b_hi)) >> 128
+		// => q = ((a_lo * b_lo) >> 64 + (a_lo * b_hi) + (b_lo * a_hi)) >> 64 + (a_hi *
+		// b_hi) (a_lo * b_lo) >> 64
 
-		// (a_lo * b_lo) >> 64
 		let q_lo_lo = self.mulhi_simd(a_lo, barret_lo);
 		// (a_lo * b_hi)_lo
 		let q_lo_hi_lo = a_lo * barret_hi;
@@ -822,6 +821,16 @@ impl Modulus {
 		let q_lo = q_hi_hi_lo + sum_hi;
 
 		a_lo - q_lo * Simd::splat(self.p)
+	}
+
+	#[inline]
+	pub fn lazy_reduce_opt_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		// a << 2^s0
+		let q = a.shr(Simd::splat(self.bits));
+		a - q * Simd::splat(self.p)
 	}
 
 	#[inline]
@@ -846,10 +855,24 @@ impl Modulus {
 		// q = qt + qb
 		let r_lo = qt_lo + qb_lo;
 		let c_mask = r_lo.simd_lt(qt_lo);
-		let q_hi = c_mask.select(qt_hi + Simd::splat(1), qt_hi) + qb_hi;
+		let q_hi = qt_hi + qb_hi;
+		let q_hi = c_mask.select(q_hi + Simd::splat(1), q_hi);
 
-		// r = a_lo - qr_hi * p
+		// r = a_lo - q_hi * p
 		a_lo - q_hi * Simd::splat(self.p)
+	}
+
+	#[inline]
+	pub fn reduce_u128_simd<const LANES: usize>(
+		&self,
+		a_hi: Simd<u64, LANES>,
+		a_lo: Simd<u64, LANES>,
+	) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		let r = self.lazy_reduce_u128_simd(a_hi, a_lo);
+		r.simd_min(r - Simd::splat(self.p))
 	}
 
 	#[inline]
@@ -861,6 +884,7 @@ impl Modulus {
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
+		debug_assert!(self.supports_opt);
 		let r = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
 		r.simd_min(r - Simd::splat(self.p))
 	}
@@ -951,9 +975,12 @@ impl Modulus {
 	{
 		let r_hi = self.mulhi_simd(a, b);
 		let r_lo = a * b;
-		// TODO: check whether this support opt barret reduction
-		let r = self.lazy_reduce_opt_u128_simd(r_hi, r_lo);
-		r.simd_min(r - Simd::splat(self.p))
+
+		if self.supports_opt {
+			self.reduce_opt_u128_simd(r_hi, r_lo)
+		} else {
+			self.reduce_u128_simd(r_hi, r_lo)
+		}
 	}
 
 	#[inline]
@@ -1016,6 +1043,8 @@ impl Modulus {
 #[cfg(test)]
 mod tests {
 	use std::simd::{Simd, SimdOrd};
+
+	use crate::zq::primes::supports_opt;
 
 	use super::primes::generate_prime;
 	use super::{primes, Modulus};
@@ -1415,36 +1444,6 @@ mod tests {
 	}
 
 	#[test]
-	fn reduce_u128_simd_works() {
-		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
-		let q_mod = Modulus::new(p).unwrap();
-
-		const LANES: usize = 8;
-
-		let rng = thread_rng();
-		let a = Uniform::new(0u128, p as u128 * p as u128)
-			.sample_iter(rng)
-			.take(2048)
-			.collect_vec();
-
-		let mut hi = a.iter().map(|v| (v >> 64) as u64).collect_vec();
-		let mut lo = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
-
-		let mut now = std::time::Instant::now();
-		q_mod.reduce_opt_u128_vec_simd(&mut hi, &lo, 2048);
-		println!("SIMD took: {:?}", now.elapsed());
-
-		now = std::time::Instant::now();
-		let reduced = a
-			.iter()
-			.map(|v| Modulus::reduce1(q_mod.lazy_reduce_opt_u128(*v), q_mod.p))
-			.collect_vec();
-		println!("Normal took: {:?}", now.elapsed());
-
-		assert_eq!(hi, reduced);
-	}
-
-	#[test]
 	fn lazy_reduce_simd_works() {
 		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
 		let q_mod = Modulus::new(p).unwrap();
@@ -1461,12 +1460,11 @@ mod tests {
 	}
 
 	#[test]
-	fn lazy_reduce_u128_simd_works() {
-		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
-		let q_mod = Modulus::new(p).unwrap();
+	fn lazy_reduce_u128_opt_and_noopt_simd_works() {
+		let q_mod = Modulus::new(4611686018326724609).unwrap();
 
 		let rng = thread_rng();
-		let a = Uniform::new(0u128, p as u128 * p as u128)
+		let a = Uniform::new(0u128, q_mod.p as u128 * q_mod.p as u128)
 			.sample_iter(rng)
 			.take(8)
 			.collect_vec();
@@ -1474,13 +1472,37 @@ mod tests {
 		let mut hi = a.iter().map(|v| (v >> 64) as u64).collect_vec();
 		let mut lo = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
 
-		let lazy_reduce_simd = q_mod.lazy_reduce_u128_simd::<8>(
-			Simd::from_slice(lo.as_slice()),
+		let lazy_reduced_simd = q_mod.lazy_reduce_u128_simd::<8>(
 			Simd::from_slice(hi.as_slice()),
+			Simd::from_slice(lo.as_slice()),
+		);
+		let lazy_reduced_opt_simd = q_mod.lazy_reduce_opt_u128_simd::<8>(
+			Simd::from_slice(hi.as_slice()),
+			Simd::from_slice(lo.as_slice()),
 		);
 		let lazy_reduced = a.iter().map(|v| q_mod.lazy_reduce_u128(*v)).collect_vec();
 
-		assert_eq!(lazy_reduce_simd.to_array().to_vec(), lazy_reduced);
+		// assert_eq!(lazy_reduced_opt_simd.to_array().to_vec(), lazy_reduced);
+		assert_eq!(lazy_reduced_simd.to_array().to_vec(), lazy_reduced);
+	}
+
+	#[test]
+	fn lazy_reduce_opt_and_noopt_simd_works() {
+		let q_mod = Modulus::new(4611686018326724609).unwrap();
+
+		let rng = thread_rng();
+		let a = Uniform::new(1 << (64 - q_mod.p.leading_zeros()), u64::MAX)
+			.sample_iter(rng)
+			.take(8)
+			.collect_vec();
+
+		let lazy_reduced_simd = q_mod.lazy_reduce_simd::<8>(Simd::from_slice(a.as_slice()));
+		let lazy_reduced_opt_simd = q_mod.lazy_reduce_opt_simd::<8>(Simd::from_slice(a.as_slice()));
+
+		let lazy_reduced = a.iter().map(|v| q_mod.lazy_reduce(*v)).collect_vec();
+
+		assert_eq!(lazy_reduced_opt_simd.to_array().to_vec(), lazy_reduced);
+		assert_eq!(lazy_reduced_simd.to_array().to_vec(), lazy_reduced);
 	}
 
 	#[test]

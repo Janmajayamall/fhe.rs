@@ -807,25 +807,19 @@ impl Modulus {
 		let q_lo_lo = self.mulhi_simd(a_lo, barret_lo);
 		// (a_lo * b_hi)_lo
 		let q_lo_hi_lo = a_lo * barret_hi;
-		let q_lo_hi_hi = self.mulhi_simd(a_lo, barret_hi);
-		// sum1 = ((a_lo * b_lo) >> 64 + (a_lo * b_hi))_lo
-		let sum1_lo = q_lo_hi_lo + q_lo_lo;
-		let sum1_hi = sum1_lo
-			.simd_lt(q_lo_hi_lo)
-			.select(q_lo_hi_hi + Simd::splat(1), q_lo_hi_hi);
-
-		// sum2 = sum1 + (a_hi * b_lo)
+		// (a_hi * b_lo)_lo
 		let q_hi_lo_lo = a_hi * barret_lo;
-		let q_hi_lo_hi = self.mulhi_simd(a_hi, barret_lo);
-		let sum2_lo = sum1_lo + q_hi_lo_lo;
-		let sum2_hi = sum1_hi + q_hi_lo_hi;
-		let sum2_hi = sum2_lo
+
+		let sum_lo = q_lo_lo + q_lo_hi_lo + q_hi_lo_lo;
+
+		let sum_hi = self.mulhi_simd(a_hi, barret_lo) + self.mulhi_simd(a_lo, barret_hi);
+		let sum_hi = sum_lo
 			.simd_lt(q_hi_lo_lo)
-			.select(sum2_hi + Simd::splat(1), sum2_hi);
+			.select(sum_hi + Simd::splat(1), sum_hi);
 
 		// (a_hi * b_hi)_lo
 		let q_hi_hi_lo = a_hi * barret_hi;
-		let q_lo = q_hi_hi_lo + sum2_hi;
+		let q_lo = q_hi_hi_lo + sum_hi;
 
 		a_lo - q_lo * Simd::splat(self.p)
 	}

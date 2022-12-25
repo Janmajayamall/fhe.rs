@@ -301,6 +301,11 @@ impl Poly {
 
 	/// Computes the forward Ntt on the coefficients
 	fn ntt_forward(&mut self) {
+		#[cfg(feature = "simd")]
+		izip!(self.coefficients.outer_iter(), self.ctx.ops.iter())
+			.for_each(|(mut v, op)| op.forward_simd(v.as_slice_mut().unwrap()));
+
+		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
 				.for_each(|(mut v, op)| unsafe { op.forward_vt(v.as_mut_ptr()) });
@@ -312,6 +317,11 @@ impl Poly {
 
 	/// Computes the backward Ntt on the coefficients
 	fn ntt_backward(&mut self) {
+		#[cfg(feature = "simd")]
+		izip!(self.coefficients.outer_iter(), self.ctx.ops.iter())
+			.for_each(|(mut v, op)| op.backward_simd(v.as_slice_mut().unwrap()));
+
+		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
 				.for_each(|(mut v, op)| unsafe { op.backward_vt(v.as_mut_ptr()) });

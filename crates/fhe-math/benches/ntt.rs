@@ -41,7 +41,10 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 			);
 
 			group.bench_function(
-				BenchmarkId::new("MEforward_simd8", format!("{}/{}", vector_size, p_nbits)),
+				BenchmarkId::new(
+					"MEforward_simd_swizzle",
+					format!("{}/{}", vector_size, p_nbits),
+				),
 				|b| b.iter(|| op.forward_simd_swizzle(&mut a)),
 			);
 

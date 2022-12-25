@@ -16,13 +16,17 @@ pub use ops::dot_product;
 use sha2::{Digest, Sha256};
 
 use self::{scaler::Scaler, switcher::Switcher, traits::TryConvertFrom};
-use crate::{Error, Result};
+use crate::{zq::Modulus, Error, Result};
+use core::slice::SlicePattern;
 use fhe_util::sample_vec_cbd;
 use itertools::{izip, Itertools};
 use ndarray::{s, Array2, ArrayView2, Axis};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use std::sync::Arc;
+use std::{
+	simd::{LaneCount, Simd, SupportedLaneCount},
+	sync::Arc,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 /// Possible representations of the underlying polynomial.
@@ -455,6 +459,79 @@ impl Poly {
 		let (mut q_new_polys, mut q_last_poly) =
 			self.coefficients.view_mut().split_at(Axis(0), q_len - 1);
 
+		#[cfg(feature = "simd")]
+		{
+			// q_last_poly
+			// 	.iter_mut()
+			// 	.for_each(|coeff| *coeff = q_last.add(*coeff, q_last_div_2));
+			q_last.add_vec_simd(
+				q_last_poly.as_slice_mut().unwrap(),
+				vec![q_last_div_2; self.ctx.degree].as_slice(),
+				self.ctx.degree,
+			);
+			izip!(
+				q_new_polys.outer_iter_mut(),
+				self.ctx.q.iter(),
+				self.ctx.inv_last_qi_mod_qj.iter(),
+				self.ctx.inv_last_qi_mod_qj_shoup.iter(),
+			)
+			.for_each(|(mut coeffs, qi, inv, inv_shoup)| {
+				let q_last_div_2_mod_qi = qi.modulus() - qi.reduce(q_last_div_2); // Up to qi.modulus()
+
+				macro_rules! lane_unroll {
+					($lanes:literal) => {
+						let (coeffs_chunks, _) = coeffs.as_slice_mut().unwrap().as_chunks_mut();
+						let (q_last_poly_chunks, _) = q_last_poly.as_slice().unwrap().as_chunks();
+
+						izip!(coeffs_chunks, q_last_poly_chunks).for_each(
+							|(coeffs, q_last_polys)| {
+								let mut coeffs_s = Simd::from_array(*coeffs);
+								let q_last_polys_s = Simd::from_array(*q_last_polys);
+
+								let tmp = if qi.supports_opt {
+									qi.lazy_reduce_opt_simd::<$lanes>(q_last_polys_s)
+								} else {
+									qi.lazy_reduce_simd(q_last_polys_s)
+								};
+								let tmp = tmp + Simd::splat(q_last_div_2_mod_qi);
+								coeffs_s =
+									coeffs_s + (Simd::splat(3) * Simd::splat(qi.modulus())) - tmp;
+								coeffs_s = qi.mul_shoup_simd(
+									coeffs_s,
+									Simd::splat(*inv),
+									Simd::splat(*inv_shoup),
+								);
+
+								*coeffs = coeffs_s.to_array();
+							},
+						);
+					};
+				}
+
+				match self.ctx.degree {
+					2 => {
+						lane_unroll!(2);
+					}
+					4 => {
+						lane_unroll!(4);
+					}
+					8 => {
+						lane_unroll!(8);
+					}
+					16 => {
+						lane_unroll!(16);
+					}
+					32 => {
+						lane_unroll!(32);
+					}
+					_ => {
+						lane_unroll!(64);
+					}
+				};
+			});
+		}
+
+		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			unsafe {
 				q_last_poly
@@ -491,8 +568,9 @@ impl Poly {
 				self.ctx.inv_last_qi_mod_qj.iter(),
 				self.ctx.inv_last_qi_mod_qj_shoup.iter(),
 			)
-			.for_each(|(coeffs, qi, inv, inv_shoup)| {
+			.for_each(|(mut coeffs, qi, inv, inv_shoup)| {
 				let q_last_div_2_mod_qi = qi.modulus() - qi.reduce(q_last_div_2); // Up to qi.modulus()
+
 				for (coeff, q_last_coeff) in izip!(coeffs, q_last_poly.iter()) {
 					// (x mod q_last - q_L/2) mod q_i
 					let tmp = qi.lazy_reduce(*q_last_coeff) + q_last_div_2_mod_qi; // Up to 3 * qi.modulus()

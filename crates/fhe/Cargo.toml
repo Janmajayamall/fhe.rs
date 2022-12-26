@@ -35,6 +35,9 @@ ndarray.workspace = true
 rand.workspace = true
 console.workspace = true
 
+[features]
+simd = ["fhe-math/simd"]
+
 [[bench]]
 name = "bfv"
 harness = false

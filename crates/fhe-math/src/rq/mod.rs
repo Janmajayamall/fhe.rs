@@ -17,7 +17,6 @@ use sha2::{Digest, Sha256};
 
 use self::{scaler::Scaler, switcher::Switcher, traits::TryConvertFrom};
 use crate::{zq::Modulus, Error, Result};
-use core::slice::SlicePattern;
 use fhe_util::sample_vec_cbd;
 use itertools::{izip, Itertools};
 use ndarray::{s, Array2, ArrayView2, Axis};
@@ -306,7 +305,7 @@ impl Poly {
 	/// Computes the forward Ntt on the coefficients
 	fn ntt_forward(&mut self) {
 		#[cfg(feature = "simd")]
-		izip!(self.coefficients.outer_iter(), self.ctx.ops.iter())
+		izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
 			.for_each(|(mut v, op)| op.forward_simd(v.as_slice_mut().unwrap()));
 
 		#[cfg(not(feature = "simd"))]
@@ -322,7 +321,7 @@ impl Poly {
 	/// Computes the backward Ntt on the coefficients
 	fn ntt_backward(&mut self) {
 		#[cfg(feature = "simd")]
-		izip!(self.coefficients.outer_iter(), self.ctx.ops.iter())
+		izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
 			.for_each(|(mut v, op)| op.backward_simd(v.as_slice_mut().unwrap()));
 
 		#[cfg(not(feature = "simd"))]
@@ -1133,6 +1132,25 @@ mod tests {
 					.collect_vec()
 			);
 		}
+
+		Ok(())
+	}
+
+	#[test]
+	fn mod_switch_down_time_measure() -> Result<(), Box<dyn Error>> {
+		let mut rng = thread_rng();
+		// let ntests = 100;
+		let ctx1 = Arc::new(Context::new(MODULI, 8)?);
+		// let ctx2 = Arc::new(Context::new(&MODULI[..2], 8)?);
+
+		let mut p = Poly::random(&ctx1, Representation::PowerBasis, &mut rng);
+
+		let now = std::time::Instant::now();
+		while p.ctx.next_context.is_some() {
+			dbg!(p.ctx());
+			p.mod_switch_down_next().unwrap();
+		}
+		println!("{:?}", now.elapsed());
 
 		Ok(())
 	}

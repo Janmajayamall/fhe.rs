@@ -667,6 +667,25 @@ impl NttOperator {
 		});
 	}
 
+	pub unsafe fn forward_lazy_simd(&self, a: &mut [u64]) {
+		// debug_assert!(LANES == 8);
+
+		let n = self.size;
+		let a_ptr = a.as_mut_ptr();
+
+		let mut l = n >> 1;
+		let mut m = 1;
+		let mut k = 1;
+
+		while l > 0 {
+			unsafe {
+				lane_unroll!(self, butterfly_simd, omegas, omegas_shoup, l, m, k, a_ptr);
+			}
+			l >>= 1;
+			m <<= 1;
+		}
+	}
+
 	#[inline]
 	fn butterfly_simd<const LANES: usize>(
 		&self,
@@ -814,14 +833,19 @@ mod tests {
 
 					for _ in 0..100 {
 						let mut a = q.random_vec(size, &mut rng);
-						let a_clone = a.clone();
+						let mut a_lazy = a.clone();
 						let mut b = a.clone();
+						let mut b_lazy = a.clone();
 
 						op.forward(&mut a);
-						assert_ne!(a, a_clone);
-
 						op.forward_simd(&mut b);
 						assert_eq!(a, b);
+
+						unsafe {
+							op.forward_vt_lazy(a_lazy.as_mut_ptr());
+							op.forward_lazy_simd(&mut b_lazy);
+							assert_eq!(a_lazy, b_lazy);
+						}
 					}
 				}
 			}

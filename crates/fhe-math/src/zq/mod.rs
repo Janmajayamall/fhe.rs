@@ -998,6 +998,14 @@ impl Modulus {
 	}
 
 	#[inline]
+	pub fn shoup_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
+	where
+		LaneCount<LANES>: SupportedLaneCount,
+	{
+		todo!()
+	}
+
+	#[inline]
 	pub fn mul_shoup_simd<const LANES: usize>(
 		&self,
 		a: Simd<u64, LANES>,
@@ -1037,6 +1045,14 @@ impl Modulus {
 
 	pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
 		lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
+	}
+
+	pub fn lazy_reduce_vec_simd(&self, a: &mut [u64], n: usize) {
+		if self.supports_opt {
+			lane_unroll!(self, lazy_reduce_opt_simd, n, a,);
+		} else {
+			lane_unroll!(self, lazy_reduce_simd, n, a,);
+		}
 	}
 }
 

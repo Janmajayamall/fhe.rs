@@ -415,8 +415,18 @@ impl Poly {
 				p.as_slice_mut()
 					.unwrap()
 					.clone_from_slice(power_basis_coefficients);
-				qi.lazy_reduce_vec(p.as_slice_mut().unwrap());
-				op.forward_vt_lazy(p.as_mut_ptr());
+
+				#[cfg(feature = "simd")]
+				{
+					qi.lazy_reduce_vec_simd(p.as_slice_mut().unwrap(), ctx.degree);
+					op.forward_lazy_simd(p.as_slice_mut().unwrap());
+				}
+
+				#[cfg(not(feature = "simd"))]
+				{
+					qi.lazy_reduce_vec(p.as_slice_mut().unwrap());
+					op.forward_vt_lazy(p.as_mut_ptr());
+				}
 			},
 		);
 		Self {

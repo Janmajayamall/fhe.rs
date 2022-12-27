@@ -15,6 +15,7 @@ pub fn zq_benchmark(c: &mut Criterion) {
 
 	for vector_size in [1024usize, 4096, 1 << 15].iter() {
 		let q = Modulus::new(p).unwrap();
+
 		let mut a = q.random_vec(*vector_size, &mut rng);
 		let c = q.random_vec(*vector_size, &mut rng);
 		let c_shoup = q.shoup_vec(&c);
@@ -66,6 +67,10 @@ pub fn zq_benchmark(c: &mut Criterion) {
 
 		group.bench_function(BenchmarkId::new("mul_vec_simd", vector_size), |b| {
 			b.iter(|| q.mul_vec_simd(&mut a, &c, *vector_size));
+		});
+
+		group.bench_function(BenchmarkId::new("mul_shoup_vec_simd", vector_size), |b| {
+			b.iter(|| q.mul_shoup_vec_simd(&mut a, &c, &c_shoup, *vector_size));
 		});
 
 		let ac = izip!(a.clone(), c.clone())

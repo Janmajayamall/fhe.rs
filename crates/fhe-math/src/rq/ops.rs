@@ -271,6 +271,22 @@ impl MulAssign<&BigUint> for Poly {
 		)
 		.unwrap();
 		q.change_representation(Representation::Ntt);
+
+		#[cfg(feature = "simd")]
+		izip!(
+			self.coefficients.outer_iter_mut(),
+			q.coefficients.outer_iter(),
+			self.ctx.q.iter()
+		)
+		.for_each(|(mut v1, v2, qi)| {
+			qi.mul_vec_simd(
+				v1.as_slice_mut().unwrap(),
+				v2.as_slice().unwrap(),
+				self.ctx.degree,
+			)
+		});
+
+		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			unsafe {
 				izip!(

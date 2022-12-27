@@ -20,6 +20,10 @@ pub fn bfv_benchmark(c: &mut Criterion) {
 	group.measurement_time(Duration::from_millis(1000));
 
 	for par in BfvParameters::default_parameters_128(20) {
+		if par.degree() != 32768 {
+			continue;
+		}
+
 		let sk = SecretKey::random(&par, &mut OsRng);
 		let ek = if par.moduli().len() > 1 {
 			Some(

@@ -1043,6 +1043,19 @@ impl Modulus {
 		lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
 	}
 
+	pub fn scalar_mul_vec_simd(&self, a: &mut [u64], b: u64, n: usize) {
+		let b_shoup = self.shoup(b);
+		let (a_chunks, _) = a.as_chunks_mut();
+		izip!(a_chunks).for_each(|ai| {
+			let res = self.mul_shoup_simd::<64>(
+				Simd::from_array(*ai),
+				Simd::splat(b),
+				Simd::splat(b_shoup),
+			);
+			*ai = res.to_array()
+		});
+	}
+
 	pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
 		lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
 	}

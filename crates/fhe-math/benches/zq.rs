@@ -108,19 +108,12 @@ pub fn zq_benchmark(c: &mut Criterion) {
 			},
 		);
 
-		group.bench_function(
-			BenchmarkId::new("lazy_mul_shoup_vec_simd", vector_size),
-			|b| {
-				b.iter(|| q.lazy_mul_shoup_vec_simd(&mut a, &c, &c_shoup, *vector_size));
-			},
-		);
+		group.bench_function(BenchmarkId::new("lazy_reduce_vec_simd", vector_size), |b| {
+			b.iter(|| q.lazy_reduce_vec_simd(&mut a, *vector_size));
+		});
 
-		group.bench_function(BenchmarkId::new("lazy_mul_shoup_vec", vector_size), |b| {
-			b.iter(|| {
-				izip!(a.iter(), c.iter(), c_shoup.iter()).for_each(|(a, c, c_shoup)| {
-					q.lazy_mul_shoup(*a, *c, *c_shoup);
-				});
-			});
+		group.bench_function(BenchmarkId::new("lazy_reduce_vec", vector_size), |b| {
+			b.iter(|| q.lazy_reduce_vec(&mut a));
 		});
 	}
 

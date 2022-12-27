@@ -16,7 +16,7 @@ use std::{
 };
 
 macro_rules! lane_unroll {
-	($self:ident, $op:ident, $n:expr,  $a:expr, $($b:expr, $b0: ident, $bi: ident),*) => {
+	($self:ident, $op:ident, $n:expr,  $a:expr; $($b:expr, $b0: ident, $bi: ident),* ; $($c:expr),*) => {
 		macro_rules! tmp {
 			($lane:literal) => {
 				let (a0, _) = $a.as_chunks_mut();
@@ -34,7 +34,11 @@ macro_rules! lane_unroll {
 					*ai = $self
 						.$op::<$lane>(Simd::from_array(*ai) $(
 							,Simd::from_array(*$bi)
-						)*)
+						)*
+						$(
+							,Simd::splat($c)
+						)*
+					)
 						.to_array();
 				});
 			};
@@ -1020,51 +1024,43 @@ impl Modulus {
 	}
 
 	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, add_simd, n, a, b, b0, bi);
+		lane_unroll!(self, add_simd, n, a; b, b0, bi;);
 	}
 
 	pub fn sub_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, sub_simd, n, a, b, b0, bi);
+		lane_unroll!(self, sub_simd, n, a; b, b0, bi;);
 	}
 
 	pub fn neg_vec_simd(&self, a: &mut [u64], n: usize) {
-		lane_unroll!(self, neg_simd, n, a,);
+		lane_unroll!(self, neg_simd, n, a;;);
 	}
 
 	pub fn mul_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, mul_simd, n, a, b, b0, bi);
+		lane_unroll!(self, mul_simd, n, a; b, b0, bi;);
 	}
 
 	pub fn lazy_mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
-		lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+		lane_unroll!(self, lazy_mul_shoup_simd, n, a; b, b0, bi, b_shoup, c0, ci;);
 	}
 
 	pub fn mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
-		lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+		lane_unroll!(self, mul_shoup_simd, n, a; b, b0, bi, b_shoup, c0, ci;);
 	}
 
 	pub fn scalar_mul_vec_simd(&self, a: &mut [u64], b: u64, n: usize) {
 		let b_shoup = self.shoup(b);
-		let (a_chunks, _) = a.as_chunks_mut();
-		izip!(a_chunks).for_each(|ai| {
-			let res = self.mul_shoup_simd::<64>(
-				Simd::from_array(*ai),
-				Simd::splat(b),
-				Simd::splat(b_shoup),
-			);
-			*ai = res.to_array()
-		});
+		lane_unroll!(self, mul_shoup_simd, n, a; ; b, b_shoup);
 	}
 
 	pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
+		lane_unroll!(self, reduce_opt_u128_simd, n, a; b, b0, bi;);
 	}
 
 	pub fn lazy_reduce_vec_simd(&self, a: &mut [u64], n: usize) {
 		if self.supports_opt {
-			lane_unroll!(self, lazy_reduce_opt_simd, n, a,);
+			lane_unroll!(self, lazy_reduce_opt_simd, n, a;;);
 		} else {
-			lane_unroll!(self, lazy_reduce_simd, n, a,);
+			lane_unroll!(self, lazy_reduce_simd, n, a;;);
 		}
 	}
 }

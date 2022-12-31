@@ -187,6 +187,25 @@ impl KeySwitchingKey {
 		}
 		Ok((c0, c1))
 	}
+
+	pub fn new_with_gadget(
+		par: &Arc<BfvParameters>,
+		ciphertext_level: usize,
+		ksk_level: usize,
+		c0: &[Poly],
+		c1: &[Poly],
+	) -> KeySwitchingKey {
+		KeySwitchingKey {
+			par: par.clone(),
+			ctx_ciphertext: par.ctx_at_level(ciphertext_level).unwrap().clone(),
+			ciphertext_level,
+			ctx_ksk: par.ctx_at_level(ksk_level).unwrap().clone(),
+			ksk_level,
+			c0: c0.to_vec().into(),
+			c1: c1.to_vec().into(),
+			seed: None,
+		}
+	}
 }
 
 impl From<&KeySwitchingKey> for KeySwitchingKeyProto {

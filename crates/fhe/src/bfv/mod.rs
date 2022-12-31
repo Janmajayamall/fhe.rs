@@ -5,6 +5,7 @@
 mod ciphertext;
 mod encoding;
 mod keys;
+mod mhe;
 mod ops;
 mod parameters;
 mod plaintext;

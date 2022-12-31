@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use super::key_switching_key::KeySwitchingKey;
 use crate::bfv::{
+	mhe::Rkg,
 	proto::bfv::{
 		KeySwitchingKey as KeySwitchingKeyProto, RelinearizationKey as RelinearizationKeyProto,
 	},
@@ -15,6 +16,7 @@ use fhe_math::rq::{
 	switcher::Switcher, traits::TryConvertFrom as TryConvertFromPoly, Poly, Representation,
 };
 use fhe_traits::{DeserializeParametrized, FheParametrized, Serialize};
+use itertools::Itertools;
 use protobuf::{Message, MessageField};
 use rand::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
@@ -109,6 +111,26 @@ impl RelinearizationKey {
 	/// Relinearize using polynomials.
 	pub(crate) fn relinearizes_poly(&self, c2: &Poly) -> Result<(Poly, Poly)> {
 		self.ksk.key_switch(c2)
+	}
+
+	pub fn new_from_rkg(
+		rkg: &Rkg,
+		agg_shares_round2: &[[Poly; 2]],
+		agg_shares_round1: &[[Poly; 2]],
+	) {
+		let c0 = agg_shares_round1.iter().map(|p| p[1].clone()).collect_vec();
+		let c1 = agg_shares_round1
+			.iter()
+			.map(|p| &p[1] + &p[1])
+			.collect_vec();
+
+		KeySwitchingKey::new_with_gadget(
+			&rkg.par,
+			rkg.ciphertext_level,
+			rkg.ksk_level,
+			c0.as_slice(),
+			c1.as_slice(),
+		);
 	}
 }
 

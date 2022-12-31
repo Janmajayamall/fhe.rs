@@ -1,5 +1,6 @@
 //! Public keys for the BFV encryption scheme
 
+use crate::bfv::mhe::Ckg;
 use crate::bfv::traits::TryConvertFrom;
 use crate::bfv::{
 	proto::bfv::{Ciphertext as CiphertextProto, PublicKey as PublicKeyProto},
@@ -34,6 +35,13 @@ impl PublicKey {
 		Self {
 			par: sk.par.clone(),
 			c,
+		}
+	}
+
+	pub fn new_from_ckg(ckg: &Ckg, agg_shares: &Poly, crp: &Poly) -> PublicKey {
+		PublicKey {
+			par: ckg.par.clone(),
+			c: Ciphertext::new(vec![agg_shares.clone(), crp.clone()], &ckg.par).unwrap(),
 		}
 	}
 }

@@ -411,7 +411,7 @@ impl Poly {
 			allow_variable_time_computations: true,
 			coefficients,
 			coefficients_shoup: None,
-			has_lazy_coefficients: true,
+			has_lazy_coefficients: false,
 		}
 	}
 

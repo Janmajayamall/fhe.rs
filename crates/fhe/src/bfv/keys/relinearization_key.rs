@@ -117,20 +117,33 @@ impl RelinearizationKey {
 		rkg: &Rkg,
 		agg_shares_round2: &[[Poly; 2]],
 		agg_shares_round1: &[[Poly; 2]],
-	) {
-		let c0 = agg_shares_round1.iter().map(|p| p[1].clone()).collect_vec();
+	) -> RelinearizationKey {
 		let c1 = agg_shares_round1
 			.iter()
-			.map(|p| &p[1] + &p[1])
+			.map(|p| {
+				let mut p = p[1].clone();
+				p.change_representation(Representation::NttShoup);
+				p
+			})
+			.collect_vec();
+		let c0 = agg_shares_round2
+			.iter()
+			.map(|p| {
+				let mut p = &p[0] + &p[1];
+				p.change_representation(Representation::NttShoup);
+				p
+			})
 			.collect_vec();
 
-		KeySwitchingKey::new_with_gadget(
+		let ksk = KeySwitchingKey::new_with_gadget(
 			&rkg.par,
 			rkg.ciphertext_level,
 			rkg.ksk_level,
 			c0.as_slice(),
 			c1.as_slice(),
 		);
+
+		RelinearizationKey { ksk }
 	}
 }
 

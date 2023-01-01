@@ -189,7 +189,7 @@ impl FheDecrypter<Plaintext, Ciphertext> for SecretKey {
 			// TODO: Can we handle plaintext moduli that are BigUint?
 			let v = Zeroizing::new(
 				Vec::<u64>::from(d.as_ref())
-					.iter_mut()
+					.iter()
 					.map(|vi| *vi + self.par.plaintext.modulus())
 					.collect_vec(),
 			);

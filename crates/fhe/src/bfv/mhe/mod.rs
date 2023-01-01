@@ -20,11 +20,20 @@ struct CkgShare {
 
 pub struct Ckg {
 	pub(crate) par: Arc<BfvParameters>,
+	pub(crate) crp: Poly,
 }
 impl Ckg {
+	pub fn new(par: &Arc<BfvParameters>, crp: &Poly) -> Ckg {
+		Ckg {
+			par: par.clone(),
+			crp: crp.clone(),
+		}
+	}
+
 	/// pass the seeded rng here to get the common reference polynomial p1
-	pub fn sample_crp() -> Poly {
-		todo!()
+	pub fn sample_crp(par: &Arc<BfvParameters>) -> Poly {
+		let mut rng = thread_rng();
+		Poly::random(par.ctx_at_level(0).unwrap(), Representation::Ntt, &mut rng)
 	}
 
 	/// Generates ith party's share to ideal pk.
@@ -35,26 +44,26 @@ impl Ckg {
 	/// p0 is aggregation of shares from each party
 	///
 	/// p0 = Summation(p_0i) for i in 0..N
-	/// where p_0i = crp * sk_i + e_i
-	fn gen_share(params: Arc<BfvParameters>, crp: &Poly, sk: &[u64]) -> CkgShare {
+	/// where p_0i = -crp * sk_i + e_i
+	fn gen_share(&self, crp: &Poly, sk: &SecretKey) -> CkgShare {
 		let mut rng = thread_rng();
 		let e = Poly::small(
-			&params.ctx[0],
+			self.par.ctx_at_level(0).unwrap(),
 			Representation::Ntt,
-			params.variance,
+			self.par.variance,
 			&mut rng,
 		)
 		.unwrap();
 
 		let mut sk = Poly::try_convert_from(
-			sk,
-			params.ctx_at_level(0).unwrap(),
+			sk.coeffs.as_ref(),
+			self.par.ctx_at_level(0).unwrap(),
 			false,
 			Representation::PowerBasis,
 		)
 		.unwrap();
 		sk.change_representation(Representation::Ntt);
-		sk *= crp;
+		sk *= &(-crp);
 		sk += &e;
 
 		CkgShare { share: sk }
@@ -64,8 +73,8 @@ impl Ckg {
 	/// ideal public key
 	///
 	/// p0 = Summation(p_0i) for i in 0..N
-	fn aggregate_shares(params: Arc<BfvParameters>, shares: &[CkgShare]) -> Poly {
-		let mut agg = Poly::zero(&params.ctx[0], Representation::Ntt);
+	fn aggregate_shares(&self, shares: &[CkgShare]) -> Poly {
+		let mut agg = Poly::zero(self.par.ctx_at_level(0).unwrap(), Representation::Ntt);
 		for sh in shares.iter() {
 			debug_assert!(sh.share.representation() == &Representation::Ntt);
 			agg += &sh.share;
@@ -275,5 +284,77 @@ impl Rkg {
 				[h0, h1]
 			})
 			.collect_vec()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use fhe_math::zq::Modulus;
+	use fhe_traits::{FheEncoder, FheEncrypter};
+
+	use super::*;
+	use crate::bfv::{BfvParameters, Ciphertext, Encoding, Plaintext, PublicKey};
+
+	fn try_decrypt(par: &Arc<BfvParameters>, parties: &[Party], ct: &Ciphertext) -> Vec<u64> {
+		// construct ideal sk
+		let mut sk = Poly::zero(par.ctx_at_level(0).unwrap(), Representation::PowerBasis);
+		parties.iter().for_each(|p| {
+			let ski = Poly::try_convert_from(
+				p.key.coeffs.as_ref(),
+				par.ctx_at_level(0).unwrap(),
+				false,
+				Representation::PowerBasis,
+			)
+			.unwrap();
+			sk += &ski;
+		});
+		sk.change_representation(Representation::Ntt);
+		let mut m_scaled = &ct.c[0] + &(&sk * &ct.c[1]);
+		m_scaled.change_representation(Representation::PowerBasis);
+
+		let d = m_scaled.scale(&par.scalers[0]).unwrap();
+		let v = Vec::<u64>::from(d.as_ref())
+			.iter()
+			.map(|vi| *vi + par.plaintext.modulus())
+			.collect_vec();
+		let mut w = v[..par.degree()].to_vec();
+		let q = Modulus::new(par.moduli[0]).unwrap();
+		q.reduce_vec(&mut w);
+		par.plaintext.reduce_vec(&mut w);
+		w
+	}
+
+	#[test]
+	fn public_test() {
+		let mut rng = thread_rng();
+		let params = Arc::new(BfvParameters::default(10, 8));
+		let no_of_parties = 4;
+
+		let parties = (0..no_of_parties)
+			.map(|_| Party {
+				key: SecretKey::random(&params, &mut rng),
+				rlk_eph_key: SecretKey::random(&params, &mut rng),
+			})
+			.collect_vec();
+
+		// Collective key generation
+		let ckg_crp = Ckg::sample_crp(&params);
+		let ckg = Ckg::new(&params, &ckg_crp);
+
+		let ckg_shares = parties
+			.iter()
+			.map(|p| ckg.gen_share(&ckg_crp, &p.key))
+			.collect_vec();
+
+		let ckg_agg_shares = ckg.aggregate_shares(&ckg_shares);
+		let ckg_pk = PublicKey::new_from_ckg(&ckg, &ckg_agg_shares, &ckg_crp);
+
+		let m = params.plaintext.random_vec(8, &mut rng);
+		let pt = Plaintext::try_encode(&m, Encoding::poly(), &params).unwrap();
+
+		let ct = ckg_pk.try_encrypt(&pt, &mut rng).unwrap();
+		let m_decrypted = try_decrypt(&params, &parties, &ct);
+
+		assert_eq!(m_decrypted, m);
 	}
 }

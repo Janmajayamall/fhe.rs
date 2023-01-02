@@ -313,6 +313,7 @@ dependencies = [
  "crypto-bigint",
  "fhe-traits",
  "fhe-util",
+ "getrandom",
  "itertools",
  "ndarray",
  "num-bigint",

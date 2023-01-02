@@ -12,6 +12,7 @@ version.workspace = true
 bench = false  # Disable default bench (we use criterion)
 
 [dependencies]
+getrandom = {version = "0.2.7", features=["js"]}
 fhe-traits = { version = "^0.1.0-beta.4", path = "../fhe-traits" }
 fhe-util = { version = "^0.1.0-beta.4", path = "../fhe-util" }
 

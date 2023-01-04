@@ -404,7 +404,14 @@ struct Cks {
 }
 
 impl Cks {
-	pub fn gen_share(&self, sk: &SecretKey, to_key: &[i64]) -> CkgShare {
+	pub fn new(ct: &Ciphertext) -> Cks {
+		Cks { ct: ct.clone() }
+	}
+
+	pub fn gen_share(&self, sk: &SecretKey, to_key: &Poly) -> CksShare {
+		debug_assert!(to_key.representation() == &Representation::PowerBasis);
+		debug_assert!(to_key.ctx() == self.ct.c[0].ctx());
+
 		let sk = Poly::try_convert_from(
 			sk.coeffs.as_ref(),
 			self.ct.c[0].ctx(),
@@ -412,17 +419,10 @@ impl Cks {
 			Representation::PowerBasis,
 		)
 		.unwrap();
-		let to_key = Poly::try_convert_from(
-			to_key,
-			self.ct.c[0].ctx(),
-			false,
-			Representation::PowerBasis,
-		)
-		.unwrap();
-		let mut s = &sk - &to_key;
+		let mut s = &sk - to_key;
 		s.change_representation(Representation::Ntt);
 
-		CkgShare {
+		CksShare {
 			share: &s * &self.ct.c[1],
 		}
 	}
@@ -446,7 +446,7 @@ impl Cks {
 #[cfg(test)]
 mod tests {
 	use fhe_math::zq::Modulus;
-	use fhe_traits::{FheDecoder, FheEncoder, FheEncrypter};
+	use fhe_traits::{FheDecoder, FheDecrypter, FheEncoder, FheEncrypter};
 
 	use super::*;
 	use crate::bfv::{
@@ -640,5 +640,45 @@ mod tests {
 		assert_eq!(&m[0], &m_sub[3]);
 		assert_eq!(&m[5..], &m_sub[4..7]);
 		assert_eq!(&m[4], &m_sub[7]);
+	}
+
+	#[test]
+	fn cks_decrypt() {
+		let mut rng = thread_rng();
+		let params = Arc::new(BfvParameters::default(10, 8));
+		let no_of_parties = 4;
+
+		let parties = (0..no_of_parties)
+			.map(|_| Party {
+				key: SecretKey::random(&params, &mut rng),
+				rlk_eph_key: SecretKey::random(&params, &mut rng),
+			})
+			.collect_vec();
+
+		let pk = gen_ckg(&params, &parties);
+
+		let m = params.plaintext.random_vec(8, &mut rng);
+		let pt = Plaintext::try_encode(&m, Encoding::simd(), &params).unwrap();
+		let ct = pk.try_encrypt(&pt, &mut rng).unwrap();
+
+		let cks = Cks::new(&ct);
+		let zero_key = Poly::zero(ct.c[0].ctx(), Representation::PowerBasis);
+		let shares = parties
+			.iter()
+			.map(|p| cks.gen_share(&p.key, &zero_key))
+			.collect_vec();
+		let ct_switched = cks.key_switch(&shares);
+
+		let zero_sk = SecretKey {
+			par: params.clone(),
+			coeffs: vec![0i64; params.degree()].into_boxed_slice(),
+		};
+		let m1 = Vec::<u64>::try_decode(
+			&zero_sk.try_decrypt(&ct_switched).unwrap(),
+			Encoding::simd(),
+		)
+		.unwrap();
+
+		assert_eq!(m, m1);
 	}
 }

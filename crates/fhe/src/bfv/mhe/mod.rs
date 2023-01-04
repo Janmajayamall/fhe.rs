@@ -10,7 +10,7 @@ use fhe_math::{
 use itertools::Itertools;
 use rand::thread_rng;
 
-use super::{BfvParameters, SecretKey};
+use super::{ciphertext, BfvParameters, Ciphertext, SecretKey};
 
 struct Party {
 	key: SecretKey,
@@ -392,6 +392,54 @@ impl Rtg {
 			})
 		});
 		agg
+	}
+}
+
+struct CksShare {
+	share: Poly,
+}
+
+struct Cks {
+	ct: Ciphertext,
+}
+
+impl Cks {
+	pub fn gen_share(&self, sk: &SecretKey, to_key: &[i64]) -> CkgShare {
+		let sk = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			self.ct.c[0].ctx(),
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+		let to_key = Poly::try_convert_from(
+			to_key,
+			self.ct.c[0].ctx(),
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+		let mut s = &sk - &to_key;
+		s.change_representation(Representation::Ntt);
+
+		CkgShare {
+			share: &s * &self.ct.c[1],
+		}
+	}
+
+	pub fn key_switch(&self, shares: &[CksShare]) -> Ciphertext {
+		let mut agg = Poly::zero(self.ct.c[0].ctx(), Representation::Ntt);
+		shares.iter().for_each(|s| {
+			agg += &s.share;
+		});
+		agg += &self.ct.c[0];
+
+		Ciphertext {
+			par: self.ct.par.clone(),
+			seed: self.ct.seed,
+			c: vec![agg, self.ct.c[0].clone()],
+			level: self.ct.level,
+		}
 	}
 }
 

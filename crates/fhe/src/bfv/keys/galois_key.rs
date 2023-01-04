@@ -2,6 +2,7 @@
 
 use super::key_switching_key::KeySwitchingKey;
 use crate::bfv::{
+	mhe::Rtg,
 	proto::bfv::{GaloisKey as GaloisKeyProto, KeySwitchingKey as KeySwitchingKeyProto},
 	traits::TryConvertFrom,
 	BfvParameters, Ciphertext, SecretKey,
@@ -11,7 +12,8 @@ use fhe_math::rq::{
 	switcher::Switcher, traits::TryConvertFrom as TryConvertFromPoly, Poly, Representation,
 	SubstitutionExponent,
 };
-use protobuf::MessageField;
+use itertools::Itertools;
+use protobuf::{rt, MessageField};
 use rand::{CryptoRng, RngCore};
 use std::sync::Arc;
 use zeroize::Zeroizing;
@@ -91,6 +93,37 @@ impl GaloisKey {
 			c: vec![c0, c1],
 			level: self.ksk.ciphertext_level,
 		})
+	}
+
+	pub fn new_from_rtg(rtg: &Rtg, agg_shares: &[Poly]) -> GaloisKey {
+		let c0 = agg_shares
+			.iter()
+			.map(|p| {
+				let mut p = p.clone();
+				p.change_representation(Representation::NttShoup);
+				p
+			})
+			.collect_vec();
+
+		let c1 = rtg
+			.crps
+			.iter()
+			.map(|p| {
+				let mut p = p.clone();
+				p.change_representation(Representation::NttShoup);
+				p
+			})
+			.collect_vec();
+
+		let ksk = KeySwitchingKey::new_with_gadget(
+			&rtg.par,
+			rtg.ciphertext_level,
+			rtg.ksk_level,
+			&c0,
+			&c1,
+		);
+		let element = SubstitutionExponent::new(&rtg.ctx_ciphertext, rtg.element.exponent).unwrap();
+		GaloisKey { element, ksk }
 	}
 }
 

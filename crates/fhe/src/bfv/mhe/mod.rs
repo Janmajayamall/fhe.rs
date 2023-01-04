@@ -1,8 +1,11 @@
-use std::sync::Arc;
+use std::{ops::Sub, sync::Arc};
 
 use fhe_math::{
 	rns::RnsContext,
-	rq::{switcher::Switcher, traits::TryConvertFrom, Context, Poly, Representation},
+	rq::{
+		switcher::Switcher, traits::TryConvertFrom, Context, Poly, Representation,
+		SubstitutionExponent,
+	},
 };
 use itertools::Itertools;
 use rand::thread_rng;
@@ -283,6 +286,115 @@ impl Rkg {
 	}
 }
 
+pub struct Rtg {
+	pub(crate) par: Arc<BfvParameters>,
+	pub(crate) ciphertext_level: usize,
+	pub(crate) ctx_ciphertext: Arc<Context>,
+
+	pub(crate) ksk_level: usize,
+	pub(crate) ctx_ksk: Arc<Context>,
+
+	pub(crate) crps: Vec<Poly>,
+	pub(crate) element: SubstitutionExponent,
+}
+
+pub struct RtgShare {
+	share: Vec<Poly>,
+}
+
+impl Rtg {
+	pub fn new(
+		par: &Arc<BfvParameters>,
+		ciphertext_level: usize,
+		ksk_level: usize,
+		crps: &[Poly],
+		element: SubstitutionExponent,
+	) -> Rtg {
+		let ctx_ciphertext = par.ctx_at_level(ciphertext_level).unwrap().clone();
+		let ctx_ksk = par.ctx_at_level(ksk_level).unwrap().clone();
+
+		Rtg {
+			par: par.clone(),
+			ciphertext_level,
+			ctx_ciphertext,
+			ksk_level,
+			ctx_ksk,
+			crps: crps.to_vec(),
+			element,
+		}
+	}
+
+	pub fn sample_crps(
+		par: &Arc<BfvParameters>,
+		ciphertext_level: usize,
+		ksk_level: usize,
+	) -> Vec<Poly> {
+		let ctx_ciphertext = par.ctx_at_level(ciphertext_level).unwrap();
+		let ctx_ksk = par.ctx_at_level(ksk_level).unwrap();
+		let mut rng = thread_rng();
+		(0..ctx_ciphertext.moduli().len())
+			.map(|_| Poly::random(ctx_ksk, Representation::Ntt, &mut rng))
+			.collect_vec()
+	}
+
+	pub fn gen_share(&self, sk: &SecretKey) -> RtgShare {
+		let sk_poly = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			&self.ctx_ciphertext,
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+		let sk_sub = sk_poly.substitute(&self.element).unwrap();
+		let switcher = Switcher::new(&self.ctx_ciphertext, &self.ctx_ksk).unwrap();
+		let sk_sub_switched = sk_sub.mod_switch_to(&switcher).unwrap();
+
+		let mut sk_poly = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			&self.ctx_ksk,
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+		sk_poly.change_representation(Representation::Ntt);
+
+		let mut rng = thread_rng();
+
+		let rns = RnsContext::new(self.ctx_ciphertext.moduli()).unwrap();
+		let share = (0..self.crps.len())
+			.map(|i| {
+				let mut e = Poly::small(
+					&self.ctx_ksk,
+					Representation::Ntt,
+					self.par.variance,
+					&mut rng,
+				)
+				.unwrap();
+				e -= &(&self.crps[i] * &sk_poly);
+
+				let garner = rns.get_garner(i).unwrap();
+				let mut garner = &sk_sub_switched * garner;
+				garner.change_representation(Representation::Ntt);
+				e += &garner;
+
+				e
+			})
+			.collect();
+
+		RtgShare { share }
+	}
+
+	pub fn aggregate_shares(&self, shares: &[RtgShare]) -> Vec<Poly> {
+		let mut agg = vec![Poly::zero(&self.ctx_ksk, Representation::Ntt); self.crps.len()];
+		shares.iter().for_each(|s| {
+			(0..self.crps.len()).for_each(|i| {
+				agg[i] += &s.share[i];
+			})
+		});
+		agg
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use fhe_math::zq::Modulus;
@@ -290,7 +402,8 @@ mod tests {
 
 	use super::*;
 	use crate::bfv::{
-		BfvParameters, Ciphertext, Encoding, Plaintext, PublicKey, RelinearizationKey,
+		keys::GaloisKey, BfvParameters, Ciphertext, Encoding, Plaintext, PublicKey,
+		RelinearizationKey,
 	};
 
 	fn try_decrypt(par: &Arc<BfvParameters>, parties: &[Party], ct: &Ciphertext) -> Plaintext {
@@ -443,5 +556,41 @@ mod tests {
 			Vec::<u64>::try_decode(&pt_decrypted, Encoding::simd()).unwrap(),
 			m1_m2
 		);
+	}
+
+	#[test]
+	fn rtg() {
+		let mut rng = thread_rng();
+		let params = Arc::new(BfvParameters::default(10, 8));
+		let no_of_parties = 4;
+
+		let parties = (0..no_of_parties)
+			.map(|_| Party {
+				key: SecretKey::random(&params, &mut rng),
+				rlk_eph_key: SecretKey::random(&params, &mut rng),
+			})
+			.collect_vec();
+
+		let crps = Rtg::sample_crps(&params, 0, 0);
+		let element = SubstitutionExponent::new(params.ctx_at_level(0).unwrap(), 3).unwrap();
+		let rtg = Rtg::new(&params, 0, 0, &crps, element);
+		let shares = parties.iter().map(|p| rtg.gen_share(&p.key)).collect_vec();
+		let agg_shares = rtg.aggregate_shares(&shares);
+		let galois_key = GaloisKey::new_from_rtg(&rtg, &agg_shares);
+
+		let pk = gen_ckg(&params, &parties);
+		let m = params.plaintext.random_vec(8, &mut rng);
+		let pt = Plaintext::try_encode(&m, Encoding::simd(), &params).unwrap();
+		let ct = pk.try_encrypt(&pt, &mut rng).unwrap();
+
+		let ct_sub = galois_key.relinearize(&ct).unwrap();
+		let m_sub =
+			Vec::<u64>::try_decode(&try_decrypt(&params, &parties, &ct_sub), Encoding::simd())
+				.unwrap();
+
+		assert_eq!(&m[1..4], &m_sub[..3]);
+		assert_eq!(&m[0], &m_sub[3]);
+		assert_eq!(&m[5..], &m_sub[4..7]);
+		assert_eq!(&m[4], &m_sub[7]);
 	}
 }

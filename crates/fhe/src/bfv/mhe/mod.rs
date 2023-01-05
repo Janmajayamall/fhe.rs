@@ -1,4 +1,7 @@
-use std::{ops::Sub, sync::Arc};
+use std::{
+	ops::Sub,
+	sync::{Arc, PoisonError},
+};
 
 use fhe_math::{
 	rns::RnsContext,
@@ -7,10 +10,11 @@ use fhe_math::{
 		SubstitutionExponent,
 	},
 };
+use fhe_util::sample_vec_cbd;
 use itertools::Itertools;
 use rand::thread_rng;
 
-use super::{ciphertext, BfvParameters, Ciphertext, SecretKey};
+use super::{ciphertext, BfvParameters, Ciphertext, PublicKey, SecretKey};
 
 struct Party {
 	key: SecretKey,
@@ -411,6 +415,7 @@ impl Cks {
 	pub fn gen_share(&self, sk: &SecretKey, to_key: &Poly) -> CksShare {
 		debug_assert!(to_key.representation() == &Representation::PowerBasis);
 		debug_assert!(to_key.ctx() == self.ct.c[0].ctx());
+		let mut rng = thread_rng();
 
 		let sk = Poly::try_convert_from(
 			sk.coeffs.as_ref(),
@@ -419,12 +424,15 @@ impl Cks {
 			Representation::PowerBasis,
 		)
 		.unwrap();
+
 		let mut s = &sk - to_key;
 		s.change_representation(Representation::Ntt);
+		s *= &self.ct.c[1];
 
-		CksShare {
-			share: &s * &self.ct.c[1],
-		}
+		let e = Poly::small(self.ct.c[0].ctx(), Representation::Ntt, 12, &mut rng).unwrap();
+		s += &e;
+
+		CksShare { share: s }
 	}
 
 	pub fn key_switch(&self, shares: &[CksShare]) -> Ciphertext {
@@ -443,10 +451,90 @@ impl Cks {
 	}
 }
 
+struct PcksShare {
+	share: [Poly; 2],
+}
+
+struct Pcks {
+	to_pk: PublicKey,
+	ct: Ciphertext,
+}
+
+impl Pcks {
+	pub fn new(ct: &Ciphertext, to_pk: &PublicKey) -> Pcks {
+		Pcks {
+			to_pk: to_pk.clone(),
+			ct: ct.clone(),
+		}
+	}
+
+	pub fn gen_share(&self, sk: &SecretKey) -> PcksShare {
+		let mut sk = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			self.ct.c[0].ctx(),
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+		sk.change_representation(Representation::Ntt);
+		sk *= &self.ct.c[1];
+
+		let mut rng = thread_rng();
+		let u_coeffs =
+			sample_vec_cbd(self.ct.par.degree(), self.ct.par.variance, &mut rng).unwrap();
+		let mut u = Poly::try_convert_from(
+			&u_coeffs,
+			self.ct.c[0].ctx(),
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+		u.change_representation(Representation::Ntt);
+		let e0 = Poly::small(self.ct.c[0].ctx(), Representation::Ntt, 12, &mut rng).unwrap();
+		sk += &e0;
+		sk += &(&u * &self.to_pk.c.c[0]);
+
+		let e1 = Poly::small(
+			self.ct.c[0].ctx(),
+			Representation::Ntt,
+			self.ct.par.variance,
+			&mut rng,
+		)
+		.unwrap();
+		u *= &self.to_pk.c.c[1];
+		u += &e1;
+
+		PcksShare { share: [sk, u] }
+	}
+
+	pub fn key_switch(&self, shares: &[PcksShare]) -> Ciphertext {
+		let mut h0 = Poly::zero(self.ct.c[0].ctx(), Representation::Ntt);
+		let mut h1 = Poly::zero(self.ct.c[0].ctx(), Representation::Ntt);
+		shares.iter().for_each(|s| {
+			h0 += &s.share[0];
+			h1 += &s.share[1];
+		});
+		h0 += &self.ct.c[0];
+
+		Ciphertext {
+			par: self.ct.par.clone(),
+			seed: None,
+			c: vec![h0, h1],
+			level: self.ct.level,
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
+	use std::{ops::Div, vec};
+
 	use fhe_math::zq::Modulus;
 	use fhe_traits::{FheDecoder, FheDecrypter, FheEncoder, FheEncrypter};
+	use itertools::izip;
+	use ndarray::Axis;
+	use num_bigint::BigUint;
+	use num_traits::{ToPrimitive, Zero};
 
 	use super::*;
 	use crate::bfv::{
@@ -475,9 +563,10 @@ mod tests {
 			m_scaled += &t;
 			ski *= &sk;
 		}
-		m_scaled.change_representation(Representation::PowerBasis);
 
-		let d = m_scaled.scale(&par.scalers[0]).unwrap();
+		let mut d = m_scaled.scale(&par.scalers[0]).unwrap();
+		d.change_representation(Representation::PowerBasis);
+
 		let v = Vec::<u64>::from(d.as_ref())
 			.iter()
 			.map(|vi| *vi + par.plaintext.modulus())
@@ -643,7 +732,7 @@ mod tests {
 	}
 
 	#[test]
-	fn cks_decrypt() {
+	fn cks() {
 		let mut rng = thread_rng();
 		let params = Arc::new(BfvParameters::default(10, 8));
 		let no_of_parties = 4;
@@ -662,13 +751,14 @@ mod tests {
 		let ct = pk.try_encrypt(&pt, &mut rng).unwrap();
 
 		let cks = Cks::new(&ct);
+
+		// decrypt
 		let zero_key = Poly::zero(ct.c[0].ctx(), Representation::PowerBasis);
 		let shares = parties
 			.iter()
 			.map(|p| cks.gen_share(&p.key, &zero_key))
 			.collect_vec();
 		let ct_switched = cks.key_switch(&shares);
-
 		let zero_sk = SecretKey {
 			par: params.clone(),
 			coeffs: vec![0i64; params.degree()].into_boxed_slice(),
@@ -678,7 +768,122 @@ mod tests {
 			Encoding::simd(),
 		)
 		.unwrap();
-
 		assert_eq!(m, m1);
+
+		// Some other random collectively known key
+		let parties2 = (0..no_of_parties)
+			.map(|_| Party {
+				key: SecretKey::random(&params, &mut rng),
+				rlk_eph_key: SecretKey::random(&params, &mut rng),
+			})
+			.collect_vec();
+
+		let shares = izip!(parties.iter(), parties2.iter())
+			.map(|(p1, p2)| {
+				cks.gen_share(
+					&p1.key,
+					&Poly::try_convert_from(
+						p2.key.coeffs.as_ref(),
+						ct.c[0].ctx(),
+						false,
+						Representation::PowerBasis,
+					)
+					.unwrap(),
+				)
+			})
+			.collect_vec();
+		let ct2 = cks.key_switch(&shares);
+		let sk2_ideal = {
+			let mut s = Poly::zero(params.ctx_at_level(0).unwrap(), Representation::PowerBasis);
+			parties2.iter().for_each(|p| {
+				let poly = Poly::try_convert_from(
+					p.key.coeffs.as_ref(),
+					s.ctx(),
+					false,
+					Representation::PowerBasis,
+				)
+				.unwrap();
+				s += &poly;
+			});
+			s.change_representation(Representation::Ntt);
+			s
+			// let rns = RnsContext::new(s.ctx().moduli()).unwrap();
+			// let b = s
+			// 	.coefficients()
+			// 	.axis_iter(Axis(1))
+			// 	.map(|rests| rns.lift(rests))
+			// 	.collect_vec();
+			// let b = b
+			// 	.iter()
+			// 	.map(|v| {
+			// 		if *v >= rns.modulus().div(2u8) {
+			// 			-((rns.modulus() - v).to_i64().unwrap())
+			// 		} else {
+			// 			v.to_i64().unwrap()
+			// 		}
+			// 	})
+			// 	.collect_vec()
+			// 	.into_boxed_slice();
+			// b
+		};
+
+		let mut m2 = &ct2.c[0] + &(&sk2_ideal * &ct2.c[1]);
+		m2.change_representation(Representation::PowerBasis);
+		let m2 = m2.scale(&params.scalers[ct2.level]).unwrap();
+		let mut m2 = Vec::<u64>::from(&m2)
+			.iter()
+			.map(|v| v + params.plaintext.modulus())
+			.collect_vec();
+		Modulus::new(params.moduli[0]).unwrap().reduce_vec(&mut m2);
+		params.plaintext.reduce_vec(&mut m2);
+
+		let mut poly_ntt =
+			Poly::try_convert_from(&m2, ct.c[0].ctx(), false, Representation::PowerBasis).unwrap();
+		poly_ntt.change_representation(Representation::Ntt);
+
+		let pt = Plaintext {
+			par: params.clone(),
+			value: m2.into(),
+			encoding: None,
+			poly_ntt,
+			level: ct.level,
+		};
+		let m2 = Vec::<u64>::try_decode(&pt, Encoding::simd()).unwrap();
+
+		// let m2 = Vec::<u64>::try_decode(&sk2_ideal.try_decrypt(&ct2).
+		// unwrap(), Encoding::simd()) .unwrap();
+		dbg!(m, m2);
+	}
+
+	#[test]
+	pub fn pcks() {
+		let mut rng = thread_rng();
+		let params = Arc::new(BfvParameters::default(10, 8));
+		let no_of_parties = 4;
+
+		let parties = (0..no_of_parties)
+			.map(|_| Party {
+				key: SecretKey::random(&params, &mut rng),
+				rlk_eph_key: SecretKey::random(&params, &mut rng),
+			})
+			.collect_vec();
+		let cpk = gen_ckg(&params, &parties);
+
+		let m = params.plaintext.random_vec(params.degree(), &mut rng);
+		let pt = Plaintext::try_encode(&m, Encoding::simd(), &params).unwrap();
+		let ct = cpk.try_encrypt(&pt, &mut rng).unwrap();
+
+		let to_sk = SecretKey::random(&params, &mut rng);
+		let to_pk = PublicKey::new(&to_sk, &mut rng);
+		let pcks = Pcks::new(&ct, &to_pk);
+
+		// Public collective key switching
+		let shares = parties.iter().map(|p| pcks.gen_share(&p.key)).collect_vec();
+		let ct2 = pcks.key_switch(&shares);
+
+		// try decrypting ct2 using to_sk
+		let pt = to_sk.try_decrypt(&ct2).unwrap();
+		let m2 = Vec::<u64>::try_decode(&pt, Encoding::simd()).unwrap();
+		assert_eq!(m, m2);
 	}
 }

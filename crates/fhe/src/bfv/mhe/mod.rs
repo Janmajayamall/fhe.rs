@@ -50,7 +50,7 @@ impl Ckg {
 	///
 	/// p0 = Summation(p_0i) for i in 0..N
 	/// where p_0i = -crp * sk_i + e_i
-	fn gen_share(&self, sk: &SecretKey) -> CkgShare {
+	fn gen_share_poly(&self, sk: &Poly) -> CkgShare {
 		let mut rng = thread_rng();
 		let e = Poly::small(
 			self.par.ctx_at_level(0).unwrap(),
@@ -60,6 +60,22 @@ impl Ckg {
 		)
 		.unwrap();
 
+		// let mut sk = Poly::try_convert_from(
+		// 	sk.coeffs.as_ref(),
+		// 	self.par.ctx_at_level(0).unwrap(),
+		// 	false,
+		// 	Representation::PowerBasis,
+		// )
+		// .unwrap();
+		// sk.change_representation(Representation::Ntt);
+		let mut a = -(&self.crp);
+		a *= sk;
+		a += &e;
+
+		CkgShare { share: a }
+	}
+
+	fn gen_share(&self, sk: &SecretKey) -> CkgShare {
 		let mut sk = Poly::try_convert_from(
 			sk.coeffs.as_ref(),
 			self.par.ctx_at_level(0).unwrap(),
@@ -68,10 +84,7 @@ impl Ckg {
 		)
 		.unwrap();
 		sk.change_representation(Representation::Ntt);
-		sk *= &(-(&self.crp));
-		sk += &e;
-
-		CkgShare { share: sk }
+		self.gen_share_poly(&sk)
 	}
 
 	/// Aggregates shares of all parties and returns
@@ -410,20 +423,11 @@ impl Cks {
 		Cks { ct: ct.clone() }
 	}
 
-	pub fn gen_share(&self, sk: &SecretKey, to_key: &Poly) -> CksShare {
-		debug_assert!(to_key.representation() == &Representation::PowerBasis);
-		debug_assert!(to_key.ctx() == self.ct.c[0].ctx());
+	pub fn gen_share_poly(&self, sk: &Poly, to_key: &Poly) -> CksShare {
+		debug_assert!(to_key.representation() == sk.representation());
 		let mut rng = thread_rng();
 
-		let sk = Poly::try_convert_from(
-			sk.coeffs.as_ref(),
-			self.ct.c[0].ctx(),
-			false,
-			Representation::PowerBasis,
-		)
-		.unwrap();
-
-		let mut s = &sk - to_key;
+		let mut s = sk - to_key;
 		s.change_representation(Representation::Ntt);
 		s *= &self.ct.c[1];
 
@@ -435,6 +439,19 @@ impl Cks {
 		s += &e;
 
 		CksShare { share: s }
+	}
+
+	pub fn gen_share(&self, sk: &SecretKey, to_key: &Poly) -> CksShare {
+		debug_assert!(to_key.representation() == &Representation::PowerBasis);
+		let sk = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			self.ct.c[0].ctx(),
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
+
+		self.gen_share_poly(&sk, to_key)
 	}
 
 	pub fn key_switch(&self, shares: &[CksShare]) -> Ciphertext {

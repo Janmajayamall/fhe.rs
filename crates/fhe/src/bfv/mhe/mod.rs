@@ -1,7 +1,4 @@
-use std::{
-	ops::Sub,
-	sync::{Arc, PoisonError},
-};
+use std::sync::Arc;
 
 use fhe_math::{
 	rns::RnsContext,
@@ -13,21 +10,22 @@ use fhe_math::{
 use fhe_util::sample_vec_cbd;
 use itertools::Itertools;
 use rand::thread_rng;
+pub mod thresholdizer;
 
-use super::{ciphertext, BfvParameters, Ciphertext, PublicKey, SecretKey};
+use super::{BfvParameters, Ciphertext, PublicKey, SecretKey};
 
-struct Party {
+pub struct Party {
 	key: SecretKey,
 	rlk_eph_key: SecretKey,
 }
 
-struct CkgShare {
+pub struct CkgShare {
 	share: Poly,
 }
 
 pub struct Ckg {
 	pub(crate) par: Arc<BfvParameters>,
-	pub(crate) crp: Poly,
+	crp: Poly,
 }
 impl Ckg {
 	pub fn new(par: &Arc<BfvParameters>, crp: &Poly) -> Ckg {
@@ -52,7 +50,7 @@ impl Ckg {
 	///
 	/// p0 = Summation(p_0i) for i in 0..N
 	/// where p_0i = -crp * sk_i + e_i
-	fn gen_share(&self, crp: &Poly, sk: &SecretKey) -> CkgShare {
+	fn gen_share(&self, sk: &SecretKey) -> CkgShare {
 		let mut rng = thread_rng();
 		let e = Poly::small(
 			self.par.ctx_at_level(0).unwrap(),
@@ -70,7 +68,7 @@ impl Ckg {
 		)
 		.unwrap();
 		sk.change_representation(Representation::Ntt);
-		sk *= &(-crp);
+		sk *= &(-(&self.crp));
 		sk += &e;
 
 		CkgShare { share: sk }
@@ -399,11 +397,11 @@ impl Rtg {
 	}
 }
 
-struct CksShare {
+pub struct CksShare {
 	share: Poly,
 }
 
-struct Cks {
+pub struct Cks {
 	ct: Ciphertext,
 }
 
@@ -429,6 +427,10 @@ impl Cks {
 		s.change_representation(Representation::Ntt);
 		s *= &self.ct.c[1];
 
+		// FIXME: How does smudging sigma relate to ct sigma?
+		// The paper defines relation as s_sigma^2 = 2^lambda * sigma, for security
+		// perimeter lambda. But implementation in lattigo sets s_sigma to 3.19, with
+		// default sigma 3.2
 		let e = Poly::small(self.ct.c[0].ctx(), Representation::Ntt, 12, &mut rng).unwrap();
 		s += &e;
 
@@ -451,11 +453,11 @@ impl Cks {
 	}
 }
 
-struct PcksShare {
+pub struct PcksShare {
 	share: [Poly; 2],
 }
 
-struct Pcks {
+pub struct Pcks {
 	to_pk: PublicKey,
 	ct: Ciphertext,
 }
@@ -527,14 +529,11 @@ impl Pcks {
 
 #[cfg(test)]
 mod tests {
-	use std::{ops::Div, vec};
+	use std::vec;
 
 	use fhe_math::zq::Modulus;
 	use fhe_traits::{FheDecoder, FheDecrypter, FheEncoder, FheEncrypter};
 	use itertools::izip;
-	use ndarray::Axis;
-	use num_bigint::BigUint;
-	use num_traits::{ToPrimitive, Zero};
 
 	use super::*;
 	use crate::bfv::{
@@ -590,13 +589,10 @@ mod tests {
 	}
 
 	fn gen_ckg(params: &Arc<BfvParameters>, parties: &[Party]) -> PublicKey {
-		let ckg_crp = Ckg::sample_crp(&params);
-		let ckg = Ckg::new(&params, &ckg_crp);
+		let ckg_crp = Ckg::sample_crp(params);
+		let ckg = Ckg::new(params, &ckg_crp);
 
-		let ckg_shares = parties
-			.iter()
-			.map(|p| ckg.gen_share(&ckg_crp, &p.key))
-			.collect_vec();
+		let ckg_shares = parties.iter().map(|p| ckg.gen_share(&p.key)).collect_vec();
 
 		let ckg_agg_shares = ckg.aggregate_shares(&ckg_shares);
 		PublicKey::new_from_ckg(&ckg, &ckg_agg_shares, &ckg_crp)

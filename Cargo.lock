@@ -294,6 +294,7 @@ dependencies = [
  "itertools",
  "ndarray",
  "num-bigint",
+ "num-bigint-dig",
  "num-traits",
  "protobuf",
  "rand",

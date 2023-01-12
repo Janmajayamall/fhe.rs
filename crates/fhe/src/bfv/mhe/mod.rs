@@ -150,9 +150,11 @@ impl Rkg {
 		key_level: usize,
 		crps: &[Poly],
 	) -> Rkg {
+		// FIXME: Figure out why switching outputs incorrect values for RLK.
+		assert!(ciphertext_level == key_level);
 		let ciphertext_ctx = params.ctx[ciphertext_level].clone();
 		let ksk_ctx = params.ctx[key_level].clone();
-		assert_eq!(ciphertext_ctx, ksk_ctx);
+
 		Rkg {
 			par: params.clone(),
 			ciphertext_level,
@@ -575,11 +577,14 @@ mod tests {
 
 	fn try_decrypt(par: &Arc<BfvParameters>, parties: &[Party], ct: &Ciphertext) -> Plaintext {
 		// construct ideal sk
-		let mut sk = Poly::zero(par.ctx_at_level(0).unwrap(), Representation::PowerBasis);
+		let mut sk = Poly::zero(
+			par.ctx_at_level(ct.level).unwrap(),
+			Representation::PowerBasis,
+		);
 		parties.iter().for_each(|p| {
 			let ski = Poly::try_convert_from(
 				p.key.coeffs.as_ref(),
-				par.ctx_at_level(0).unwrap(),
+				par.ctx_at_level(ct.level).unwrap(),
 				false,
 				Representation::PowerBasis,
 			)
@@ -595,7 +600,7 @@ mod tests {
 			ski *= &sk;
 		}
 
-		let mut d = m_scaled.scale(&par.scalers[0]).unwrap();
+		let mut d = m_scaled.scale(&par.scalers[ct.level]).unwrap();
 		d.change_representation(Representation::PowerBasis);
 
 		let v = Vec::<u64>::from(d.as_ref())
@@ -670,8 +675,8 @@ mod tests {
 				rlk_eph_key: SecretKey::random(&params, &mut rng),
 			})
 			.collect_vec();
-		let crps = Rkg::sample_crps(&params, 0, 0);
-		let rkg = Rkg::new(&params, 0, 0, &crps);
+		let crps = Rkg::sample_crps(&params, 2, 2);
+		let rkg = Rkg::new(&params, 2, 2, &crps);
 
 		// round1
 		let r1_shares = parties
@@ -696,16 +701,20 @@ mod tests {
 
 		let pt1 = Plaintext::try_encode(&m1, Encoding::simd(), &params).unwrap();
 		let pt2 = Plaintext::try_encode(&m2, Encoding::simd(), &params).unwrap();
-		let ct1 = pk.try_encrypt(&pt1, &mut rng).unwrap();
-		let ct2 = pk.try_encrypt(&pt2, &mut rng).unwrap();
+		let mut ct1 = pk.try_encrypt(&pt1, &mut rng).unwrap();
+		let mut ct2 = pk.try_encrypt(&pt2, &mut rng).unwrap();
+		// ct1.mod_switch_to_next_level();
+		// ct2.mod_switch_to_next_level();
 
 		let mut ct3 = &ct1 * &ct2;
+		ct3.mod_switch_to_next_level();
+		ct3.mod_switch_to_next_level();
 		rlk.relinearizes(&mut ct3).unwrap();
 
 		let pt_decrypted = try_decrypt(&params, &parties, &ct3);
 
 		assert_eq!(
-			Vec::<u64>::try_decode(&pt_decrypted, Encoding::simd()).unwrap(),
+			Vec::<u64>::try_decode(&pt_decrypted, Encoding::simd_at_level(0)).unwrap(),
 			m1_m2
 		);
 	}
@@ -723,9 +732,9 @@ mod tests {
 			})
 			.collect_vec();
 
-		let crps = Rtg::sample_crps(&params, 0, 0);
+		let crps = Rtg::sample_crps(&params, 1, 0);
 		let element = SubstitutionExponent::new(params.ctx_at_level(0).unwrap(), 3).unwrap();
-		let rtg = Rtg::new(&params, 0, 0, &crps, element);
+		let rtg = Rtg::new(&params, 1, 0, &crps, element);
 		let shares = parties.iter().map(|p| rtg.gen_share(&p.key)).collect_vec();
 		let agg_shares = rtg.aggregate_shares(&shares);
 		let galois_key = GaloisKey::new_from_rtg(&rtg, &agg_shares);
@@ -733,7 +742,8 @@ mod tests {
 		let pk = gen_ckg(&params, &parties);
 		let m = params.plaintext.random_vec(8, &mut rng);
 		let pt = Plaintext::try_encode(&m, Encoding::simd(), &params).unwrap();
-		let ct = pk.try_encrypt(&pt, &mut rng).unwrap();
+		let mut ct = pk.try_encrypt(&pt, &mut rng).unwrap();
+		ct.mod_switch_to_next_level();
 
 		let ct_sub = galois_key.relinearize(&ct).unwrap();
 		let m_sub =

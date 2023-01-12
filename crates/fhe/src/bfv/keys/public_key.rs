@@ -38,10 +38,10 @@ impl PublicKey {
 		}
 	}
 
-	pub fn new_from_ckg(ckg: &Ckg, agg_shares: &Poly, crp: &Poly) -> PublicKey {
+	pub fn new_from_ckg(ckg: &Ckg, agg_shares: &Poly) -> PublicKey {
 		PublicKey {
 			par: ckg.par.clone(),
-			c: Ciphertext::new(vec![agg_shares.clone(), crp.clone()], &ckg.par).unwrap(),
+			c: Ciphertext::new(vec![agg_shares.clone(), ckg.crp.clone()], &ckg.par).unwrap(),
 		}
 	}
 }

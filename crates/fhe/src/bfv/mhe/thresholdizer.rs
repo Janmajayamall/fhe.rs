@@ -256,7 +256,7 @@ mod tests {
 				})
 				.collect_vec();
 			let agg_shares = ckg.aggregate_shares(&ckg_shares);
-			PublicKey::new_from_ckg(&ckg, &agg_shares, &crp)
+			PublicKey::new_from_ckg(&ckg, &agg_shares)
 		};
 
 		// Encrypt message usinf pk generated in collective key generation

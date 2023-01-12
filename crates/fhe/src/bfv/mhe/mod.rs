@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use fhe_math::{
 	rns::RnsContext,
 	rq::{
@@ -10,6 +8,7 @@ use fhe_math::{
 use fhe_util::sample_vec_cbd;
 use itertools::Itertools;
 use rand::thread_rng;
+use std::sync::Arc;
 pub mod thresholdizer;
 
 use super::{BfvParameters, Ciphertext, PublicKey, SecretKey};
@@ -25,7 +24,7 @@ pub struct CkgShare {
 
 pub struct Ckg {
 	pub(crate) par: Arc<BfvParameters>,
-	crp: Poly,
+	pub(crate) crp: Poly,
 }
 impl Ckg {
 	pub fn new(par: &Arc<BfvParameters>, crp: &Poly) -> Ckg {
@@ -75,7 +74,7 @@ impl Ckg {
 		CkgShare { share: a }
 	}
 
-	fn gen_share(&self, sk: &SecretKey) -> CkgShare {
+	pub fn gen_share(&self, sk: &SecretKey) -> CkgShare {
 		let mut sk = Poly::try_convert_from(
 			sk.coeffs.as_ref(),
 			self.par.ctx_at_level(0).unwrap(),
@@ -91,7 +90,7 @@ impl Ckg {
 	/// ideal public key
 	///
 	/// p0 = Summation(p_0i) for i in 0..N
-	fn aggregate_shares(&self, shares: &[CkgShare]) -> Poly {
+	pub fn aggregate_shares(&self, shares: &[CkgShare]) -> Poly {
 		let mut agg = Poly::zero(self.par.ctx_at_level(0).unwrap(), Representation::Ntt);
 		for sh in shares.iter() {
 			debug_assert!(sh.share.representation() == &Representation::Ntt);
@@ -182,22 +181,30 @@ impl Rkg {
 	pub fn gen_share_round1(
 		&self,
 		params: &Arc<BfvParameters>,
-		sk: &[i64],
-		rlk_eph_sk: &[i64],
+		sk: &SecretKey,
+		rlk_eph_sk: &SecretKey,
 	) -> RkgShare {
 		let mut rng = thread_rng();
 
-		let mut sk =
-			Poly::try_convert_from(sk, &self.ciphertext_ctx, false, Representation::PowerBasis)
-				.unwrap();
+		let mut sk = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			&self.ciphertext_ctx,
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
 		let switcher = Switcher::new(&self.ciphertext_ctx, &self.ksk_ctx).unwrap();
 		sk = sk.mod_switch_to(&switcher).unwrap();
 		let sk_power_basis = sk.clone();
 		sk.change_representation(Representation::Ntt);
 
-		let mut rlk_eph_sk =
-			Poly::try_convert_from(rlk_eph_sk, &self.ksk_ctx, false, Representation::PowerBasis)
-				.unwrap();
+		let mut rlk_eph_sk = Poly::try_convert_from(
+			rlk_eph_sk.coeffs.as_ref(),
+			&self.ksk_ctx,
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
 		rlk_eph_sk.change_representation(Representation::Ntt);
 
 		let rns = RnsContext::new(self.ciphertext_ctx.moduli()).unwrap();
@@ -239,21 +246,29 @@ impl Rkg {
 		&self,
 		params: &Arc<BfvParameters>,
 		agg_shares_round1: &[[Poly; 2]],
-		sk: &[i64],
-		rlk_eph_sk: &[i64],
+		sk: &SecretKey,
+		rlk_eph_sk: &SecretKey,
 	) -> RkgShare {
 		let mut rng = thread_rng();
 
-		let mut sk =
-			Poly::try_convert_from(sk, &self.ciphertext_ctx, false, Representation::PowerBasis)
-				.unwrap();
+		let mut sk = Poly::try_convert_from(
+			sk.coeffs.as_ref(),
+			&self.ciphertext_ctx,
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
 		let switcher = Switcher::new(&self.ciphertext_ctx, &self.ksk_ctx).unwrap();
 		sk = sk.mod_switch_to(&switcher).unwrap();
 		sk.change_representation(Representation::Ntt);
 
-		let mut rlk_eph_sub_sk =
-			Poly::try_convert_from(rlk_eph_sk, &self.ksk_ctx, false, Representation::PowerBasis)
-				.unwrap();
+		let mut rlk_eph_sub_sk = Poly::try_convert_from(
+			rlk_eph_sk.coeffs.as_ref(),
+			&self.ksk_ctx,
+			false,
+			Representation::PowerBasis,
+		)
+		.unwrap();
 		rlk_eph_sub_sk.change_representation(Representation::Ntt);
 		rlk_eph_sub_sk -= &sk;
 
@@ -612,7 +627,7 @@ mod tests {
 		let ckg_shares = parties.iter().map(|p| ckg.gen_share(&p.key)).collect_vec();
 
 		let ckg_agg_shares = ckg.aggregate_shares(&ckg_shares);
-		PublicKey::new_from_ckg(&ckg, &ckg_agg_shares, &ckg_crp)
+		PublicKey::new_from_ckg(&ckg, &ckg_agg_shares)
 	}
 
 	#[test]
@@ -661,25 +676,12 @@ mod tests {
 		// round1
 		let r1_shares = parties
 			.iter()
-			.map(|p| {
-				rkg.gen_share_round1(
-					&params,
-					p.key.coeffs.as_ref(),
-					p.rlk_eph_key.coeffs.as_ref(),
-				)
-			})
+			.map(|p| rkg.gen_share_round1(&params, &p.key, &p.rlk_eph_key))
 			.collect_vec();
 		let r1_agg_shares = rkg.aggregate_shares(&r1_shares);
 		let r2_shares = parties
 			.iter()
-			.map(|p| {
-				rkg.gen_share_round2(
-					&params,
-					&r1_agg_shares,
-					p.key.coeffs.as_ref(),
-					p.rlk_eph_key.coeffs.as_ref(),
-				)
-			})
+			.map(|p| rkg.gen_share_round2(&params, &r1_agg_shares, &p.key, &p.rlk_eph_key))
 			.collect_vec();
 		let r2_agg_shares = rkg.aggregate_shares(&r2_shares);
 		let rlk = RelinearizationKey::new_from_rkg(&rkg, &r2_agg_shares, &r1_agg_shares);

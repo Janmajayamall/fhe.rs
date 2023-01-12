@@ -199,6 +199,40 @@ impl EvaluationKey {
 		}
 		m
 	}
+
+	/// Constructs evaluation key with supplied galois keys
+	///
+	/// TODO: Add support for expansion
+	pub fn new_from_gks(
+		par: &Arc<BfvParameters>,
+		ciphertext_level: usize,
+		evaluation_key_level: usize,
+		gk: HashMap<usize, GaloisKey>,
+		enable_inner_sum: bool,
+	) -> Result<EvaluationKey> {
+		let rot_to_gk_exponent = EvaluationKey::construct_rot_to_gk_exponent(par);
+
+		if enable_inner_sum {
+			let mut i = 1;
+			while i < par.degree() / 2 {
+				if !gk.contains_key(rot_to_gk_exponent.get(&i).unwrap()) {
+					return Err(Error::DefaultError(
+						"gk does not contain all keys for inner sum".to_string(),
+					));
+				}
+				i *= 2;
+			}
+		}
+
+		Ok(EvaluationKey {
+			gk,
+			par: par.clone(),
+			ciphertext_level,
+			evaluation_key_level,
+			monomials: vec![],
+			rot_to_gk_exponent,
+		})
+	}
 }
 
 impl FheParametrized for EvaluationKey {

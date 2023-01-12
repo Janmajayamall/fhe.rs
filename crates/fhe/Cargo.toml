@@ -56,3 +56,6 @@ name = "sealpir"
 
 [[example]]
 name = "util"
+
+[[example]]
+name = "mhe_pir"

@@ -12,6 +12,7 @@ use std::{
 
 use super::Modulus;
 use fhe_util::is_prime;
+use hexl_rs::Ntt;
 use itertools::izip;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -39,6 +40,7 @@ pub struct NttOperator {
 	zetas_inv_shoup: Box<[u64]>,
 	size_inv: u64,
 	size_inv_shoup: u64,
+	ntt_hexl: hexl_rs::Ntt,
 }
 
 macro_rules! lane_unroll {
@@ -132,6 +134,8 @@ impl NttOperator {
 			let omegas_shoup = p.shoup_vec(&omegas);
 			let zetas_inv_shoup = p.shoup_vec(&zetas_inv);
 
+			let ntt_hexl = hexl_rs::Ntt::new(size as u64, p.p);
+
 			Some(Self {
 				p: p.clone(),
 				p_twice: p.p * 2,
@@ -143,6 +147,7 @@ impl NttOperator {
 				zetas_inv_shoup: zetas_inv_shoup.into_boxed_slice(),
 				size_inv,
 				size_inv_shoup: p.shoup(size_inv),
+				ntt_hexl,
 			})
 		}
 	}
@@ -729,6 +734,14 @@ impl NttOperator {
 		y = self.p.lazy_mul_shoup_simd((p_twice + t - y), z, z_shoup);
 
 		(x, y)
+	}
+
+	pub fn forward_hexl(&self, a: &mut [u64]) {
+		self.ntt_hexl.forward(a, 1, 1);
+	}
+
+	pub fn backward_hexl(&self, a: &mut [u64]) {
+		self.ntt_hexl.backward(a, 1, 1);
 	}
 }
 

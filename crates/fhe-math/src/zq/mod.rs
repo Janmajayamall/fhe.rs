@@ -998,14 +998,6 @@ impl Modulus {
 	}
 
 	#[inline]
-	pub fn shoup_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		todo!()
-	}
-
-	#[inline]
 	pub fn mul_shoup_simd<const LANES: usize>(
 		&self,
 		a: Simd<u64, LANES>,
@@ -1020,11 +1012,11 @@ impl Modulus {
 	}
 
 	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, add_simd, n, a, b, b0, bi);
+		hexl_rs::elwise_add_mod(a, b, self.p, n as u64);
 	}
 
 	pub fn sub_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, sub_simd, n, a, b, b0, bi);
+		hexl_rs::elwise_sub_mod(a, b, self.p, n as u64);
 	}
 
 	pub fn neg_vec_simd(&self, a: &mut [u64], n: usize) {
@@ -1032,26 +1024,34 @@ impl Modulus {
 	}
 
 	pub fn mul_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, mul_simd, n, a, b, b0, bi);
+		hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 1);
 	}
 
 	pub fn lazy_mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
-		lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+		if self.nbits > 52 {
+			lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+		} else {
+			hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 2);
+		}
 	}
 
 	pub fn mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
-		lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+		if self.nbits > 52 {
+			lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
+		} else {
+			hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 1);
+		}
 	}
 
-	pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-		lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
-	}
+	// pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+	// 	lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
+	// }
 
 	pub fn lazy_reduce_vec_simd(&self, a: &mut [u64], n: usize) {
-		if self.supports_opt {
+		if self.nbits > 52 && self.supports_opt {
 			lane_unroll!(self, lazy_reduce_opt_simd, n, a,);
 		} else {
-			lane_unroll!(self, lazy_reduce_simd, n, a,);
+			hexl_rs::elem_reduce_mod(a, self.p, n as u64, self.p, 2);
 		}
 	}
 }

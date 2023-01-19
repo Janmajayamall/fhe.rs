@@ -62,6 +62,16 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 				BenchmarkId::new("backward_simd", format!("{}/{}", vector_size, p_nbits)),
 				|b| b.iter(|| op.backward_simd(&mut a)),
 			);
+
+			group.bench_function(
+				BenchmarkId::new("forward_hexl", format!("{}/{}", vector_size, p_nbits)),
+				|b| b.iter(|| op.forward_hexl(&mut a)),
+			);
+
+			group.bench_function(
+				BenchmarkId::new("backward_hexl", format!("{}/{}", vector_size, p_nbits)),
+				|b| b.iter(|| op.backward_hexl(&mut a)),
+			);
 		}
 	}
 

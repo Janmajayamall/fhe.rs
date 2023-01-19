@@ -86,7 +86,8 @@ pub fn zq_benchmark(c: &mut Criterion) {
 					.unzip();
 
 				b.iter(|| {
-					q.reduce_opt_u128_vec_simd(&mut ac.0, &ac.1, *vector_size);
+					// q.reduce_opt_u128_vec_simd(&mut ac.0, &ac.1,
+					// *vector_size);
 				});
 			},
 		);

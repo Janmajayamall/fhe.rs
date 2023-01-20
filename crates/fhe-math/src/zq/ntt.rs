@@ -12,6 +12,7 @@ use std::{
 
 use super::Modulus;
 use fhe_util::is_prime;
+#[cfg(target_arch = "x86")]
 use hexl_rs::Ntt;
 use itertools::izip;
 use rand::{Rng, SeedableRng};
@@ -30,6 +31,7 @@ pub fn supports_ntt(p: u64, n: usize) -> bool {
 /// Number-Theoretic Transform operator.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NttOperator {
+	#[cfg(not(target_arch = "x86"))]
 	p: Modulus,
 	p_twice: u64,
 	size: usize,
@@ -40,59 +42,9 @@ pub struct NttOperator {
 	zetas_inv_shoup: Box<[u64]>,
 	size_inv: u64,
 	size_inv_shoup: u64,
+
+	#[cfg(target_arch = "x86")]
 	ntt_hexl: hexl_rs::Ntt,
-}
-
-macro_rules! lane_unroll {
-	($self:ident, $op:ident, $roots:ident, $roots_shoup:ident, $l:expr, $m:expr, $k:expr, $a_ptr:expr) => {
-		macro_rules! tmp {
-			($lane:literal) => {
-				for i in 0..$m {
-					let omega = Simd::splat(*$self.$roots.get_unchecked($k));
-					let omega_shoup = Simd::splat(*$self.$roots_shoup.get_unchecked($k));
-					$k += 1;
-
-					let s = 2 * i * $l;
-
-					let (x, _) = std::slice::from_raw_parts_mut($a_ptr.add(s), $l).as_chunks_mut();
-					let (y, _) =
-						std::slice::from_raw_parts_mut($a_ptr.add(s + $l), $l).as_chunks_mut();
-					izip!(x, y).for_each(|(_x, _y)| {
-						let (xr, yr) = $self.$op::<$lane>(
-							Simd::from_array(*_x),
-							Simd::from_array(*_y),
-							omega,
-							omega_shoup,
-						);
-						*_x = *xr.as_array();
-						*_y = *yr.as_array();
-					});
-				}
-			};
-		}
-
-		match $l {
-			1 => {
-				tmp!(1)
-			}
-			2 => {
-				tmp!(2)
-			}
-			4 => {
-				tmp!(4)
-			}
-			8 => {
-				tmp!(8)
-			}
-			16 => {
-				tmp!(16)
-			}
-			32 => {
-				tmp!(32)
-			}
-			_ => tmp!(64),
-		}
-	};
 }
 
 impl NttOperator {
@@ -134,6 +86,7 @@ impl NttOperator {
 			let omegas_shoup = p.shoup_vec(&omegas);
 			let zetas_inv_shoup = p.shoup_vec(&zetas_inv);
 
+			#[cfg(target_arch = "x86")]
 			let ntt_hexl = hexl_rs::Ntt::new(size as u64, p.p);
 
 			Some(Self {
@@ -147,6 +100,7 @@ impl NttOperator {
 				zetas_inv_shoup: zetas_inv_shoup.into_boxed_slice(),
 				size_inv,
 				size_inv_shoup: p.shoup(size_inv),
+				#[cfg(target_arch = "x86")]
 				ntt_hexl,
 			})
 		}
@@ -155,6 +109,48 @@ impl NttOperator {
 	/// Compute the forward NTT in place.
 	/// Aborts if a is not of the size handled by the operator.
 	pub fn forward(&self, a: &mut [u64]) {
+		self.forward_native(a);
+	}
+
+	/// Compute the backward NTT in place.
+	/// Aborts if a is not of the size handled by the operator.
+	pub fn backward(&self, a: &mut [u64]) {
+		self.backward_native(a)
+	}
+
+	/// Compute the forward NTT in place in variable time in a lazily fashion.
+	/// This means that the output coefficients may be up to 4 times the
+	/// modulus.
+	///
+	/// # Safety
+	/// This function assumes that a_ptr points to at least `size` elements.
+	/// This function is not constant time and its timing may reveal information
+	/// about the value being reduced.
+	pub unsafe fn forward_vt_lazy(&self, a_ptr: *mut u64) {
+		self.forward_vt_lazy_native(a_ptr)
+	}
+
+	/// Compute the forward NTT in place in variable time.
+	///
+	/// # Safety
+	/// This function assumes that a_ptr points to at least `size` elements.
+	/// This function is not constant time and its timing may reveal information
+	/// about the value being reduced.
+	pub unsafe fn forward_vt(&self, a_ptr: *mut u64) {
+		self.forward_vt_native(a_ptr);
+	}
+
+	/// Compute the backward NTT in place in variable time.
+	///
+	/// # Safety
+	/// This function assumes that a_ptr points to at least `size` elements.
+	/// This function is not constant time and its timing may reveal information
+	/// about the value being reduced.
+	pub unsafe fn backward_vt(&self, a_ptr: *mut u64) {
+		self.backward_vt_native(a_ptr);
+	}
+
+	pub fn forward_native(&self, a: &mut [u64]) {
 		debug_assert_eq!(a.len(), self.size);
 
 		let n = self.size;
@@ -198,9 +194,7 @@ impl NttOperator {
 		}
 	}
 
-	/// Compute the backward NTT in place.
-	/// Aborts if a is not of the size handled by the operator.
-	pub fn backward(&self, a: &mut [u64]) {
+	pub fn backward_native(&self, a: &mut [u64]) {
 		debug_assert_eq!(a.len(), self.size);
 
 		let a_ptr = a.as_mut_ptr();
@@ -245,15 +239,7 @@ impl NttOperator {
 			.for_each(|ai| *ai = self.p.mul_shoup(*ai, self.size_inv, self.size_inv_shoup));
 	}
 
-	/// Compute the forward NTT in place in variable time in a lazily fashion.
-	/// This means that the output coefficients may be up to 4 times the
-	/// modulus.
-	///
-	/// # Safety
-	/// This function assumes that a_ptr points to at least `size` elements.
-	/// This function is not constant time and its timing may reveal information
-	/// about the value being reduced.
-	pub unsafe fn forward_vt_lazy(&self, a_ptr: *mut u64) {
+	pub unsafe fn forward_vt_lazy_native(&self, a_ptr: *mut u64) {
 		let mut l = self.size >> 1;
 		let mut m = 1;
 		let mut k = 1;
@@ -290,26 +276,14 @@ impl NttOperator {
 		}
 	}
 
-	/// Compute the forward NTT in place in variable time.
-	///
-	/// # Safety
-	/// This function assumes that a_ptr points to at least `size` elements.
-	/// This function is not constant time and its timing may reveal information
-	/// about the value being reduced.
-	pub unsafe fn forward_vt(&self, a_ptr: *mut u64) {
+	pub unsafe fn forward_vt_native(&self, a_ptr: *mut u64) {
 		self.forward_vt_lazy(a_ptr);
 		for i in 0..self.size {
 			*a_ptr.add(i) = self.reduce3_vt(*a_ptr.add(i))
 		}
 	}
 
-	/// Compute the backward NTT in place in variable time.
-	///
-	/// # Safety
-	/// This function assumes that a_ptr points to at least `size` elements.
-	/// This function is not constant time and its timing may reveal information
-	/// about the value being reduced.
-	pub unsafe fn backward_vt(&self, a_ptr: *mut u64) {
+	pub unsafe fn backward_vt_native(&self, a_ptr: *mut u64) {
 		let mut k = 0;
 		let mut m = self.size >> 1;
 		let mut l = 1;
@@ -466,276 +440,6 @@ impl NttOperator {
 		(p.pow(a, n as u64) == 1) && (p.pow(a, (n / 2) as u64) != 1)
 	}
 
-	pub fn forward_simd(&self, a: &mut [u64]) {
-		// debug_assert!(LANES == 8);
-
-		let n = self.size;
-		let a_ptr = a.as_mut_ptr();
-
-		let mut l = n >> 1;
-		let mut m = 1;
-		let mut k = 1;
-
-		while l > 0 {
-			unsafe {
-				lane_unroll!(self, butterfly_simd, omegas, omegas_shoup, l, m, k, a_ptr);
-			}
-			l >>= 1;
-			m <<= 1;
-		}
-
-		// reduce x in [0, 4p) to [0, p)
-		let (x, _) = a.as_chunks_mut();
-		let p_twice = Simd::splat(self.p_twice);
-		let p = Simd::splat(self.p.p);
-		x.iter_mut().for_each(|v: &mut [u64; 8]| {
-			let mut _x = Simd::from_slice(v);
-			_x = _x.simd_min(_x - p_twice);
-			_x = _x.simd_min(_x - p);
-			*v = *_x.as_array();
-		});
-	}
-
-	pub fn forward_simd_swizzle(&self, a: &mut [u64]) {
-		// debug_assert!(LANES == 8);
-
-		let n = self.size;
-		let a_ptr = a.as_mut_ptr();
-
-		let mut l = n >> 1;
-		let mut m = 1;
-		let mut k = 1;
-
-		while l > 0 {
-			unsafe {
-				match l {
-					1 | 2 => {
-						for i in 0..m {
-							let omega = *self.omegas.get_unchecked(k);
-							let omega_shoup = *self.omegas_shoup.get_unchecked(k);
-							k += 1;
-
-							let s = 2 * i * l;
-
-							for j in s..s + l {
-								self.butterfly(
-									&mut *a_ptr.add(j),
-									&mut *a_ptr.add(j + l),
-									omega,
-									omega_shoup,
-								);
-							}
-						}
-					}
-					4 => {
-						for i in 0..(m / 2) {
-							let o1 = *self.omegas.get_unchecked(k);
-							let o2 = *self.omegas.get_unchecked(k + 1);
-							let os1 = *self.omegas_shoup.get_unchecked(k);
-							let os2 = *self.omegas_shoup.get_unchecked(k + 1);
-							k += 2;
-
-							let omega = Simd::from_array([o1, o1, o1, o1, o2, o2, o2, o2]);
-							let omega_shoup =
-								Simd::from_array([os1, os1, os1, os1, os2, os2, os2, os2]);
-
-							let s = 2 * i * 8;
-
-							let a = u64x8::from_slice(std::slice::from_raw_parts(a_ptr.add(s), 8));
-							let b =
-								u64x8::from_slice(std::slice::from_raw_parts(a_ptr.add(s + 8), 8));
-
-							// shuffle
-							let x = simd_swizzle!(
-								a,
-								b,
-								[
-									First(0),
-									First(1),
-									First(2),
-									First(3),
-									Second(0),
-									Second(1),
-									Second(2),
-									Second(3)
-								]
-							);
-							let y = simd_swizzle!(
-								a,
-								b,
-								[
-									First(4),
-									First(5),
-									First(6),
-									First(7),
-									Second(4),
-									Second(5),
-									Second(6),
-									Second(7)
-								]
-							);
-
-							let (x, y) = self.butterfly_simd::<8>(x, y, omega, omega_shoup);
-
-							// shuffle back
-							let xr = x.as_array();
-							let yr = y.as_array();
-
-							let view = std::slice::from_raw_parts_mut(a_ptr.add(s), 16);
-							view[..4].copy_from_slice(&xr[..4]);
-							view[4..8].copy_from_slice(&yr[..4]);
-							view[8..12].copy_from_slice(&xr[4..]);
-							view[12..].copy_from_slice(&yr[4..]);
-						}
-					}
-
-					_ => {
-						for i in 0..m {
-							let omega = Simd::splat(*self.omegas.get_unchecked(k));
-							let omega_shoup = Simd::splat(*self.omegas_shoup.get_unchecked(k));
-							k += 1;
-
-							let s = 2 * i * l;
-
-							let (x, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s), l).as_chunks_mut();
-							let (y, _) =
-								std::slice::from_raw_parts_mut(a_ptr.add(s + l), l).as_chunks_mut();
-							izip!(x, y).for_each(|(_x, _y)| {
-								let (xr, yr) = self.butterfly_simd::<8>(
-									Simd::from_slice(_x),
-									Simd::from_slice(_y),
-									omega,
-									omega_shoup,
-								);
-								*_x = *xr.as_array();
-								*_y = *yr.as_array();
-							});
-						}
-					}
-				}
-			}
-			l >>= 1;
-			m <<= 1;
-		}
-
-		// reduce x in [0, 4p) to [0, p)
-		let (x, _) = a.as_chunks_mut();
-		let p_twice = Simd::splat(self.p_twice);
-		let p = Simd::splat(self.p.p);
-		x.iter_mut().for_each(|v: &mut [u64; 8]| {
-			let mut _x = Simd::from_slice(v);
-			_x = _x.simd_min(_x - p_twice);
-			_x = _x.simd_min(_x - p);
-			*v = *_x.as_array();
-		});
-	}
-
-	pub fn backward_simd(&self, a: &mut [u64]) {
-		let n = self.size;
-		let a_ptr = a.as_mut_ptr();
-
-		let mut l = 1;
-		let mut m = n >> 1;
-		let mut k = 0;
-
-		while m > 0 {
-			unsafe {
-				lane_unroll!(
-					self,
-					inv_butterfly_simd,
-					zetas_inv,
-					zetas_inv_shoup,
-					l,
-					m,
-					k,
-					a_ptr
-				);
-			}
-
-			l <<= 1;
-			m >>= 1;
-		}
-
-		let size_inv = Simd::splat(self.size_inv);
-		let size_inv_shoup = Simd::splat(self.size_inv_shoup);
-
-		let (x, x1) = a.as_chunks_mut();
-		debug_assert!(x1.is_empty());
-		x.iter_mut().for_each(|v| {
-			let mut _x = Simd::from_array(*v);
-			_x = self
-				.p
-				.lazy_mul_shoup_simd::<8>(_x, size_inv, size_inv_shoup);
-			_x = _x.simd_min(_x - Simd::splat(self.p.p));
-			*v = *_x.as_array();
-		});
-	}
-
-	pub unsafe fn forward_lazy_simd(&self, a: &mut [u64]) {
-		// debug_assert!(LANES == 8);
-
-		let n = self.size;
-		let a_ptr = a.as_mut_ptr();
-
-		let mut l = n >> 1;
-		let mut m = 1;
-		let mut k = 1;
-
-		while l > 0 {
-			unsafe {
-				lane_unroll!(self, butterfly_simd, omegas, omegas_shoup, l, m, k, a_ptr);
-			}
-			l >>= 1;
-			m <<= 1;
-		}
-	}
-
-	#[inline]
-	fn butterfly_simd<const LANES: usize>(
-		&self,
-		mut x: Simd<u64, LANES>,
-		mut y: Simd<u64, LANES>,
-		w: Simd<u64, LANES>,
-		w_shoup: Simd<u64, LANES>,
-	) -> (Simd<u64, LANES>, Simd<u64, LANES>)
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		// reduce x to [0, 2p)
-		let p_twice = Simd::splat(self.p_twice);
-		x = x.simd_min(x - p_twice);
-
-		let t = self.p.lazy_mul_shoup_simd(y, w, w_shoup);
-		y = x + p_twice - t;
-		x += t;
-
-		(x, y)
-	}
-
-	#[inline]
-	fn inv_butterfly_simd<const LANES: usize>(
-		&self,
-		mut x: Simd<u64, LANES>,
-		mut y: Simd<u64, LANES>,
-		z: Simd<u64, LANES>,
-		z_shoup: Simd<u64, LANES>,
-	) -> (Simd<u64, LANES>, Simd<u64, LANES>)
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let p_twice = Simd::splat(self.p_twice);
-		//
-		// TODO replace this reduce with reduce in hexl implementation
-		let t = x;
-		x += y;
-		x = x.simd_min(x - p_twice);
-
-		y = self.p.lazy_mul_shoup_simd((p_twice + t - y), z, z_shoup);
-
-		(x, y)
-	}
-
 	pub fn forward_hexl(&self, a: &mut [u64]) {
 		self.ntt_hexl.forward(a, 1, 1);
 	}
@@ -828,91 +532,6 @@ mod tests {
 						}
 
 						assert_eq!(a, a_lazy);
-					}
-				}
-			}
-		}
-	}
-
-	#[test]
-	fn forward_simd_works() {
-		let mut rng = thread_rng();
-		for size in [32, 1024] {
-			for p in [1153, 4611686018326724609] {
-				let q = Modulus::new(p).unwrap();
-
-				if supports_ntt(p, size) {
-					let op = NttOperator::new(&q, size).unwrap();
-
-					for _ in 0..100 {
-						let mut a = q.random_vec(size, &mut rng);
-						let mut a_lazy = a.clone();
-						let mut b = a.clone();
-						let mut b_lazy = a.clone();
-
-						op.forward(&mut a);
-						op.forward_simd(&mut b);
-						assert_eq!(a, b);
-
-						unsafe {
-							op.forward_vt_lazy(a_lazy.as_mut_ptr());
-							op.forward_lazy_simd(&mut b_lazy);
-							assert_eq!(a_lazy, b_lazy);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	#[test]
-	fn backward_simd_works() {
-		let mut rng = thread_rng();
-		for size in [32, 1024] {
-			for p in [1153, 4611686018326724609] {
-				if supports_ntt(p, size) {
-					let q = Modulus::new(p).unwrap();
-
-					let op = NttOperator::new(&q, size).unwrap();
-
-					for _ in 0..100 {
-						let mut a = q.random_vec(size, &mut rng);
-						let mut a_clone = a.clone();
-						op.forward_simd(&mut a);
-						assert_ne!(a_clone, a);
-
-						op.backward_simd(&mut a);
-						assert_eq!(a_clone, a);
-					}
-				}
-			}
-		}
-	}
-
-	#[test]
-	fn error_test() {
-		let mut rng = thread_rng();
-		for size in [32, 1024] {
-			for p in [1153] {
-				if supports_ntt(p, size) {
-					let q = Modulus::new(p).unwrap();
-
-					let op = NttOperator::new(&q, size).unwrap();
-
-					for _ in 0..100 {
-						let mut a = q.random_vec(size, &mut rng);
-						let mut a_clone = a.clone();
-
-						op.forward_simd(&mut a);
-
-						op.backward_simd(&mut a);
-						assert_eq!(a_clone, a);
-
-						// let mut a_clone2 = a.clone();
-
-						// op.backward(&mut a_clone);
-						// op.backward_simd::<8>(&mut a_clone2);
-						// assert_eq!(a_clone, a_clone2);
 					}
 				}
 			}

@@ -85,7 +85,9 @@ impl Scaler {
 					// Backward NTT
 					if p.allow_variable_time_computations {
 						izip!(p_coefficients_powerbasis.outer_iter_mut(), p.ctx.ops.iter())
-							.for_each(|(mut v, op)| unsafe { op.backward_vt(v.as_mut_ptr()) });
+							.for_each(|(mut v, op)| unsafe {
+								op.backward_vt(v.as_slice_mut().unwrap())
+							});
 					} else {
 						izip!(p_coefficients_powerbasis.outer_iter_mut(), p.ctx.ops.iter())
 							.for_each(|(mut v, op)| op.backward(v.as_slice_mut().unwrap()));
@@ -109,7 +111,9 @@ impl Scaler {
 								.outer_iter_mut(),
 							&self.to.ops[self.number_common_moduli..]
 						)
-						.for_each(|(mut v, op)| unsafe { op.forward_vt(v.as_mut_ptr()) });
+						.for_each(|(mut v, op)| unsafe {
+							op.forward_vt(v.as_slice_mut().unwrap())
+						});
 					} else {
 						izip!(
 							new_coefficients

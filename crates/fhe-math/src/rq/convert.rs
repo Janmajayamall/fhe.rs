@@ -111,7 +111,7 @@ impl TryConvertFrom<Vec<u64>> for Poly {
 								|(mut w, qi)| {
 									let wi = w.as_slice_mut().unwrap();
 									wi[..v.len()].copy_from_slice(&v);
-									qi.reduce_vec_vt(wi);
+									qi.reduce_vec_vt(wi, ctx.degree);
 								},
 							);
 							out.allow_variable_time_computations();
@@ -121,7 +121,7 @@ impl TryConvertFrom<Vec<u64>> for Poly {
 							|(mut w, qi)| {
 								let wi = w.as_slice_mut().unwrap();
 								wi[..v.len()].copy_from_slice(&v);
-								qi.reduce_vec(wi);
+								qi.reduce_vec(wi, ctx.degree);
 							},
 						);
 						v.zeroize();

@@ -48,7 +48,7 @@ impl Plaintext {
 		let mut m_v = Zeroizing::new(self.value.clone());
 		self.par
 			.plaintext
-			.scalar_mul_vec(&mut m_v, self.par.q_mod_t[self.level]);
+			.scalar_mul_vec(&mut m_v, self.par.q_mod_t[self.level], self.value.len());
 		let ctx = self.par.ctx_at_level(self.level).unwrap();
 		let mut m =
 			Poly::try_convert_from(m_v.as_ref(), ctx, false, Representation::PowerBasis).unwrap();

@@ -40,6 +40,15 @@ macro_rules! lane_unroll {
 			};
 		}
 		match $n {
+			1 => {
+				tmp!(1);
+			}
+			2 => {
+				tmp!(2);
+			}
+			4 => {
+				tmp!(4);
+			}
 			8 => {
 				tmp!(8);
 			}
@@ -243,6 +252,7 @@ impl Modulus {
 	///
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn add_vec(&self, a: &mut [u64], b: &[u64]) {
 		debug_assert_eq!(a.len(), b.len());
 
@@ -256,6 +266,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being added.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn add_vec_vt(&self, a: &mut [u64], b: &[u64]) {
 		let n = a.len();
 		debug_assert_eq!(n, b.len());
@@ -296,6 +307,7 @@ impl Modulus {
 	///
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn sub_vec(&self, a: &mut [u64], b: &[u64]) {
 		debug_assert_eq!(a.len(), b.len());
 
@@ -309,6 +321,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being subtracted.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn sub_vec_vt(&self, a: &mut [u64], b: &[u64]) {
 		let n = a.len();
 		debug_assert_eq!(n, b.len());
@@ -349,6 +362,7 @@ impl Modulus {
 	///
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn mul_vec(&self, a: &mut [u64], b: &[u64]) {
 		debug_assert_eq!(a.len(), b.len());
 
@@ -362,6 +376,7 @@ impl Modulus {
 	/// Modular scalar multiplication of vectors in place in constant time.
 	///
 	/// Aborts if any of the values in a is >= p in debug mode.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn scalar_mul_vec(&self, a: &mut [u64], b: u64) {
 		let b_shoup = self.shoup(b);
 		a.iter_mut()
@@ -374,6 +389,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being multiplied.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn scalar_mul_vec_vt(&self, a: &mut [u64], b: u64) {
 		let b_shoup = self.shoup(b);
 		a.iter_mut()
@@ -387,6 +403,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being subtracted.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn mul_vec_vt(&self, a: &mut [u64], b: &[u64]) {
 		debug_assert_eq!(a.len(), b.len());
 
@@ -400,6 +417,7 @@ impl Modulus {
 	/// Compute the Shoup representation of a vector.
 	///
 	/// Aborts if any of the values of the vector is >= p in debug mode.
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub fn shoup_vec(&self, a: &[u64]) -> Vec<u64> {
 		a.iter().map(|ai| self.shoup(*ai)).collect_vec()
 	}
@@ -408,6 +426,7 @@ impl Modulus {
 	///
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn mul_shoup_vec(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64]) {
 		debug_assert_eq!(a.len(), b.len());
 		debug_assert_eq!(a.len(), b_shoup.len());
@@ -424,6 +443,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being multiplied.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn mul_shoup_vec_vt(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64]) {
 		debug_assert_eq!(a.len(), b.len());
 		debug_assert_eq!(a.len(), b_shoup.len());
@@ -434,6 +454,7 @@ impl Modulus {
 	}
 
 	/// Reduce a vector in place in constant time.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn reduce_vec(&self, a: &mut [u64]) {
 		a.iter_mut().for_each(|ai| *ai = self.reduce(*ai));
 	}
@@ -459,6 +480,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being centered.
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn center_vec_vt(&self, a: &[u64]) -> Vec<i64> {
 		a.iter().map(|ai| self.center_vt(*ai)).collect_vec()
 	}
@@ -468,6 +490,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being reduced.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn reduce_vec_vt(&self, a: &mut [u64]) {
 		a.iter_mut().for_each(|ai| *ai = self.reduce_vt(*ai));
 	}
@@ -487,6 +510,7 @@ impl Modulus {
 	}
 
 	/// Reduce a vector in place in constant time.
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub fn reduce_vec_i64(&self, a: &[i64]) -> Vec<u64> {
 		a.iter().map(|ai| self.reduce_i64(*ai)).collect_vec()
 	}
@@ -496,11 +520,13 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being reduced.
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn reduce_vec_i64_vt(&self, a: &[i64]) -> Vec<u64> {
 		a.iter().map(|ai| self.reduce_i64_vt(*ai)).collect_vec()
 	}
 
 	/// Reduce a vector in constant time.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn reduce_vec_new(&self, a: &[u64]) -> Vec<u64> {
 		a.iter().map(|ai| self.reduce(*ai)).collect_vec()
 	}
@@ -510,6 +536,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being reduced.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn reduce_vec_new_vt(&self, a: &[u64]) -> Vec<u64> {
 		a.iter().map(|bi| self.reduce_vt(*bi)).collect_vec()
 	}
@@ -517,6 +544,7 @@ impl Modulus {
 	/// Modular negation of a vector in place in constant time.
 	///
 	/// Aborts if any of the values in the vector is >= p in debug mode.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn neg_vec(&self, a: &mut [u64]) {
 		izip!(a.iter_mut()).for_each(|ai| *ai = self.neg(*ai));
 	}
@@ -527,6 +555,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being negated.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn neg_vec_vt(&self, a: &mut [u64]) {
 		izip!(a.iter_mut()).for_each(|ai| *ai = self.neg_vt(*ai));
 	}
@@ -727,7 +756,8 @@ impl Modulus {
 
 	/// Lazy modular reduction of a vector in constant time.
 	/// The output coefficients are in the interval [0, 2 * p).
-	pub fn lazy_reduce_vec(&self, a: &mut [u64]) {
+	#[cfg(not(target_arch = "x86_64"))]
+	pub fn lazy_reduce_vec(&self, a: &mut [u64], n: usize) {
 		if self.supports_opt {
 			a.iter_mut().for_each(|ai| *ai = self.lazy_reduce_opt(*ai))
 		} else {
@@ -764,128 +794,22 @@ impl Modulus {
 	}
 
 	#[inline]
-	pub fn lazy_reduce_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let barret_lo = Simd::splat(self.barrett_lo);
-		let barret_hi = Simd::splat(self.barrett_hi);
-
-		// (a * barret_lo) >> 64
-		let p_lo_lo = self.mulhi_simd(a, barret_lo);
-
-		// (a * barret_hi)
-		let p_lo_hi_lo = a * barret_hi;
-		let p_lo_hi_hi = self.mulhi_simd(a, barret_hi);
-
-		// (p_lo_lo + p_lo_hi) >> 64
-		let res = p_lo_hi_lo + p_lo_lo;
-		let q = res
-			.simd_lt(p_lo_hi_lo)
-			.select(p_lo_hi_hi + Simd::splat(1), p_lo_hi_hi);
-
-		a - q * Simd::splat(self.p)
-	}
-
-	#[inline]
-	pub fn lazy_reduce_u128_simd<const LANES: usize>(
-		&self,
-		a_hi: Simd<u64, LANES>,
-		a_lo: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let barret_lo = Simd::splat(self.barrett_lo);
-		let barret_hi = Simd::splat(self.barrett_hi);
-
-		// => q = ((a_lo + 2^64 a_hi) * (b_lo + 2^64 b_hi)) >> 128
-		// => q = ((a_lo * b_lo) >> 64 + (a_lo * b_hi) + (b_lo * a_hi)) >> 64 + (a_hi *
-		// b_hi) (a_lo * b_lo) >> 64
-
-		let q_lo_lo = self.mulhi_simd(a_lo, barret_lo);
-		// (a_lo * b_hi)_lo
-		let q_lo_hi_lo = a_lo * barret_hi;
-		// (a_hi * b_lo)_lo
-		let q_hi_lo_lo = a_hi * barret_lo;
-
-		let sum_lo = q_lo_lo + q_lo_hi_lo + q_hi_lo_lo;
-
-		let sum_hi = self.mulhi_simd(a_hi, barret_lo) + self.mulhi_simd(a_lo, barret_hi);
-		let sum_hi = sum_lo
-			.simd_lt(q_hi_lo_lo)
-			.select(sum_hi + Simd::splat(1), sum_hi);
-
-		// (a_hi * b_hi)_lo
-		let q_hi_hi_lo = a_hi * barret_hi;
-		let q_lo = q_hi_hi_lo + sum_hi;
-
-		a_lo - q_lo * Simd::splat(self.p)
-	}
-
-	#[inline]
 	pub fn lazy_reduce_opt_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		// a << 2^s0
 		let q = a.shr(Simd::splat(self.bits));
-		a - q * Simd::splat(self.p)
+		a - (q * Simd::splat(self.p))
 	}
 
 	#[inline]
-	pub fn lazy_reduce_opt_u128_simd<const LANES: usize>(
-		&self,
-		a_hi: Simd<u64, LANES>,
-		a_lo: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
+	pub fn reduce_opt_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
-		// qt = barret_lo * a_hi
-		let barret_lo = Simd::splat(self.barrett_lo);
-		let qt_hi = self.mulhi_simd(barret_lo, a_hi);
-		let qt_lo = barret_lo * a_hi;
-
-		// qb = a << 2^s0
-		let ls = Simd::splat(self.leading_zeros_u64);
-		let qb_hi = a_hi.shl(ls) + a_lo.shr(Simd::splat(self.bits));
-		let qb_lo = a_lo.shl(ls);
-
-		// q = qt + qb
-		let r_lo = qt_lo + qb_lo;
-		let c_mask = r_lo.simd_lt(qt_lo);
-		let q_hi = qt_hi + qb_hi;
-		let q_hi = c_mask.select(q_hi + Simd::splat(1), q_hi);
-
-		// r = a_lo - q_hi * p
-		a_lo - q_hi * Simd::splat(self.p)
-	}
-
-	#[inline]
-	pub fn reduce_u128_simd<const LANES: usize>(
-		&self,
-		a_hi: Simd<u64, LANES>,
-		a_lo: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let r = self.lazy_reduce_u128_simd(a_hi, a_lo);
-		r.simd_min(r - Simd::splat(self.p))
-	}
-
-	#[inline]
-	pub fn reduce_opt_u128_simd<const LANES: usize>(
-		&self,
-		a_hi: Simd<u64, LANES>,
-		a_lo: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		debug_assert!(self.supports_opt);
-		let r = self.lazy_reduce_opt_u128_simd(a_hi, a_lo);
+		// a << 2^s0
+		let r = self.lazy_reduce_opt_simd(a);
 		r.simd_min(r - Simd::splat(self.p))
 	}
 
@@ -929,58 +853,13 @@ impl Modulus {
 	}
 
 	#[inline]
-	pub fn add_simd<const LANES: usize>(
-		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let c = a + b;
-		c.simd_min(c - Simd::splat(self.p))
-	}
-
-	#[inline]
-	pub fn sub_simd<const LANES: usize>(
-		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let c = a + self.neg_simd(b);
-		c.simd_min(c - Simd::splat(self.p))
-	}
-
-	#[inline]
 	pub fn neg_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
 		LaneCount<LANES>: SupportedLaneCount,
 	{
 		let p = Simd::splat(self.p);
-		let n = p - a;
-		n.simd_min(n - p)
-	}
-
-	#[inline]
-	pub fn mul_simd<const LANES: usize>(
-		&self,
-		a: Simd<u64, LANES>,
-		b: Simd<u64, LANES>,
-	) -> Simd<u64, LANES>
-	where
-		LaneCount<LANES>: SupportedLaneCount,
-	{
-		let r_hi = self.mulhi_simd(a, b);
-		let r_lo = a * b;
-
-		if self.supports_opt {
-			self.reduce_opt_u128_simd(r_hi, r_lo)
-		} else {
-			self.reduce_u128_simd(r_hi, r_lo)
-		}
+		p - a
+		// n.simd_min(n - p)
 	}
 
 	#[inline]
@@ -1011,31 +890,47 @@ impl Modulus {
 		r.simd_min(r - Simd::splat(self.p))
 	}
 
-	pub fn add_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+	pub fn add_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		hexl_rs::elwise_add_mod(a, b, self.p, n as u64);
 	}
 
-	pub fn sub_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+	pub fn add_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
+		self.add_vec(a, b, n);
+	}
+
+	pub fn sub_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		hexl_rs::elwise_sub_mod(a, b, self.p, n as u64);
 	}
 
-	pub fn neg_vec_simd(&self, a: &mut [u64], n: usize) {
+	pub fn sub_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
+		self.sub_vec(a, b, n);
+	}
+
+	pub fn neg_vec(&self, a: &mut [u64], n: usize) {
 		lane_unroll!(self, neg_simd, n, a,);
 	}
 
-	pub fn mul_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
+	pub fn neg_vec_vt(&self, a: &mut [u64], n: usize) {
+		self.neg_vec(a, n);
+	}
+
+	pub fn mul_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 1);
 	}
 
-	pub fn lazy_mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
-		if self.nbits > 52 {
-			lane_unroll!(self, lazy_mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
-		} else {
-			hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 2);
-		}
+	pub fn mul_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
+		self.mul_vec(a, b, n);
 	}
 
-	pub fn mul_shoup_vec_simd(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
+	pub fn scalar_mul_vec(&self, a: &mut [u64], b: u64, n: usize) {
+		hexl_rs::elwise_mult_scalar_mod(a, b, self.p, n as u64, 1);
+	}
+
+	pub fn scalar_mul_vec_vt(&self, a: &mut [u64], b: u64, n: usize) {
+		self.scalar_mul_vec(a, b, n);
+	}
+
+	pub fn mul_shoup_vec(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		if self.nbits > 52 {
 			lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
 		} else {
@@ -1043,11 +938,40 @@ impl Modulus {
 		}
 	}
 
-	// pub fn reduce_opt_u128_vec_simd(&self, a: &mut [u64], b: &[u64], n: usize) {
-	// 	lane_unroll!(self, reduce_opt_u128_simd, n, a, b, b0, bi);
-	// }
+	pub fn mul_shoup_vec_vt(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
+		self.mul_shoup_vec(a, b, b_shoup, n);
+	}
 
-	pub fn lazy_reduce_vec_simd(&self, a: &mut [u64], n: usize) {
+	pub fn reduce_vec(&self, a: &mut [u64], n: usize) {
+		if self.nbits > 52 && self.supports_opt {
+			lane_unroll!(self, reduce_opt_simd, n, a,);
+		} else {
+			hexl_rs::elem_reduce_mod(a, self.p, n as u64, self.p, 1);
+		}
+
+	}
+
+	pub fn reduce_vec_vt(&self, a: &mut [u64], n: usize) {
+		self.reduce_vec(a, n);
+	}
+
+	pub fn reduce_vec_new(&self, a: &[u64], n: usize) -> Vec<u64> {
+		let mut a = a.to_vec();
+
+		if self.nbits > 52 && self.supports_opt {
+			lane_unroll!(self, reduce_opt_simd, n, &mut a,);
+		} else {
+			hexl_rs::elem_reduce_mod(&mut a, self.p, n as u64, self.p, 1);
+		}
+
+		a
+	}
+
+	pub fn reduce_vec_new_vt(&self, a: &[u64], n: usize) -> Vec<u64> {
+		self.reduce_vec_new(a, n)
+	}
+
+	pub fn lazy_reduce_vec(&self, a: &mut [u64], n: usize) {
 		if self.nbits > 52 && self.supports_opt {
 			lane_unroll!(self, lazy_reduce_opt_simd, n, a,);
 		} else {
@@ -1058,10 +982,6 @@ impl Modulus {
 
 #[cfg(test)]
 mod tests {
-	use std::simd::{Simd, SimdOrd};
-
-	use crate::zq::primes::supports_opt;
-
 	use super::primes::generate_prime;
 	use super::{primes, Modulus};
 	use fhe_util::catch_unwind;
@@ -1071,6 +991,7 @@ mod tests {
 	use rand::distributions::Uniform;
 	use rand::prelude::Distribution;
 	use rand::{thread_rng, RngCore};
+	use std::simd::{Simd, SimdOrd};
 
 	// Utility functions for the proptests.
 
@@ -1079,10 +1000,19 @@ mod tests {
 	}
 
 	fn vecs() -> BoxedStrategy<(Vec<u64>, Vec<u64>)> {
-		prop_vec(any::<u64>(), 1..100)
-			.prop_flat_map(|vec| {
-				let len = vec.len();
-				(Just(vec), prop_vec(any::<u64>(), len))
+		(0..11usize)
+			.prop_flat_map(|i| {
+				let len = 1 << i;
+				(prop_vec(any::<u64>(), len), prop_vec(any::<u64>(), len))
+			})
+			.boxed()
+	}
+
+	fn vecs2() -> BoxedStrategy<Vec<u64>> {
+		(0..11usize)
+			.prop_flat_map(|i| {
+				let len = 1 << i;
+				prop_vec(any::<u64>(), len)
 			})
 			.boxed()
 	}
@@ -1208,91 +1138,100 @@ mod tests {
 
 		#[test]
 		fn add_vec(p in valid_moduli(), (mut a, mut b) in vecs()) {
-			p.reduce_vec(&mut a);
-			p.reduce_vec(&mut b);
+			let len = a.clone().len();
+			p.reduce_vec(&mut a, len);
+			p.reduce_vec(&mut b, len);
 			let c = a.clone();
-			p.add_vec(&mut a, &b);
+			p.add_vec(&mut a, &b, b.len());
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.add(*bi, *ci)).collect_vec());
 			a = c.clone();
-			unsafe { p.add_vec_vt(&mut a, &b) }
+			unsafe { p.add_vec_vt(&mut a, &b, b.len()) }
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.add(*bi, *ci)).collect_vec());
 		}
 
 		#[test]
 		fn sub_vec(p in valid_moduli(), (mut a, mut b) in vecs()) {
-			p.reduce_vec(&mut a);
-			p.reduce_vec(&mut b);
+			let len = a.clone().len();
+			p.reduce_vec(&mut a, len);
+			p.reduce_vec(&mut b, len);
 			let c = a.clone();
-			p.sub_vec(&mut a, &b);
+			p.sub_vec(&mut a, &b, b.len());
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.sub(*ci, *bi)).collect_vec());
 			a = c.clone();
-			unsafe { p.sub_vec_vt(&mut a, &b) }
+			unsafe { p.sub_vec_vt(&mut a, &b, b.len()) }
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.sub(*ci, *bi)).collect_vec());
 		}
 
 		#[test]
 		fn mul_vec(p in valid_moduli(), (mut a, mut b) in vecs()) {
-			p.reduce_vec(&mut a);
-			p.reduce_vec(&mut b);
+			let len = a.clone().len();
+			p.reduce_vec(&mut a, len);
+			p.reduce_vec(&mut b, len);
 			let c = a.clone();
-			p.mul_vec(&mut a, &b);
+			p.mul_vec(&mut a, &b, b.len());
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.mul(*ci, *bi)).collect_vec());
 			a = c.clone();
-			unsafe { p.mul_vec_vt(&mut a, &b); }
+			unsafe { p.mul_vec_vt(&mut a, &b, b.len()); }
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.mul(*ci, *bi)).collect_vec());
 		}
 
 		#[test]
-		fn scalar_mul_vec(p in valid_moduli(), mut a: Vec<u64>, mut b: u64) {
-			p.reduce_vec(&mut a);
+		fn scalar_mul_vec(p in valid_moduli(), mut a in vecs2(), mut b: u64) {
+			let len = a.len();
+			p.reduce_vec(&mut a, len);
 			b = p.reduce(b);
 			let c = a.clone();
 
-			p.scalar_mul_vec(&mut a, b);
+			p.scalar_mul_vec(&mut a, b, len);
 			prop_assert_eq!(a, c.iter().map(|ci| p.mul(*ci, b)).collect_vec());
 
 			a = c.clone();
-			unsafe { p.scalar_mul_vec_vt(&mut a, b) }
+			unsafe { p.scalar_mul_vec_vt(&mut a, b, len) }
 			prop_assert_eq!(a, c.iter().map(|ci| p.mul(*ci, b)).collect_vec());
 		}
 
 		#[test]
 		fn mul_shoup_vec(p in valid_moduli(), (mut a, mut b) in vecs()) {
-			p.reduce_vec(&mut a);
-			p.reduce_vec(&mut b);
+			let len = a.clone().len();
+			p.reduce_vec(&mut a, len);
+			p.reduce_vec(&mut b, len);
 			let b_shoup = p.shoup_vec(&b);
 			let c = a.clone();
-			p.mul_shoup_vec(&mut a, &b, &b_shoup);
+			p.mul_shoup_vec(&mut a, &b, &b_shoup,b.len());
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.mul(*ci, *bi)).collect_vec());
 			a = c.clone();
-			unsafe { p.mul_shoup_vec_vt(&mut a, &b, &b_shoup) }
+			unsafe { p.mul_shoup_vec_vt(&mut a, &b, &b_shoup,b.len()) }
 			prop_assert_eq!(a, izip!(b.iter(), c.iter()).map(|(bi, ci)| p.mul(*ci, *bi)).collect_vec());
 		}
 
 		#[test]
-		fn reduce_vec(p in valid_moduli(), a: Vec<u64>) {
+		fn reduce_vec(p in valid_moduli(), a in vecs2()) {
+			let len = a.len();
 			let mut b = a.clone();
-			p.reduce_vec(&mut b);
+
+			p.reduce_vec(&mut b, len);
 			prop_assert_eq!(b, a.iter().map(|ai| p.reduce(*ai)).collect_vec());
 
 			b = a.clone();
-			unsafe { p.reduce_vec_vt(&mut b) }
+			unsafe { p.reduce_vec_vt(&mut b, len) }
 			prop_assert_eq!(b, a.iter().map(|ai| p.reduce(*ai)).collect_vec());
 		}
 
 		#[test]
-		fn lazy_reduce_vec(p in valid_moduli(), a: Vec<u64>) {
+		fn lazy_reduce_vec(p in valid_moduli(), a in vecs2()) {
+			let len = a.len();
 			let mut b = a.clone();
-			p.lazy_reduce_vec(&mut b);
+			p.lazy_reduce_vec(&mut b, len);
 			prop_assert!(b.iter().all(|bi| *bi < 2 * p.modulus()));
 			prop_assert!(izip!(a, b).all(|(ai, bi)| bi % p.modulus() == ai % p.modulus()));
 		}
 
 		#[test]
-		fn reduce_vec_new(p in valid_moduli(), a: Vec<u64>) {
-			let b = p.reduce_vec_new(&a);
+		fn reduce_vec_new(p in valid_moduli(), a in vecs2()) {
+			let len = a.len();
+			let b = p.reduce_vec_new(&a, a.len());
 			prop_assert_eq!(b, a.iter().map(|ai| p.reduce(*ai)).collect_vec());
-			prop_assert_eq!(p.reduce_vec_new(&a), unsafe { p.reduce_vec_new_vt(&a) });
+			prop_assert_eq!(p.reduce_vec_new(&a, len), unsafe { p.reduce_vec_new_vt(&a, len) });
 		}
 
 		#[test]
@@ -1304,13 +1243,14 @@ mod tests {
 		}
 
 		#[test]
-		fn neg_vec(p in valid_moduli(), mut a: Vec<u64>) {
-			p.reduce_vec(&mut a);
+		fn neg_vec(p in valid_moduli(),mut a in vecs2()) {
+			let len = a.len();
+			p.reduce_vec(&mut a, len);
 			let mut b = a.clone();
-			p.neg_vec(&mut b);
+			p.neg_vec(&mut b, len);
 			prop_assert_eq!(b, a.iter().map(|ai| p.neg(*ai)).collect_vec());
 			b = a.clone();
-			unsafe { p.neg_vec_vt(&mut b); }
+			unsafe { p.neg_vec_vt(&mut b,len); }
 			prop_assert_eq!(b, a.iter().map(|ai| p.neg(*ai)).collect_vec());
 		}
 
@@ -1331,7 +1271,8 @@ mod tests {
 
 		#[test]
 		fn serialize(p in valid_moduli(), mut a in prop_vec(any::<u64>(), 8)) {
-			p.reduce_vec(&mut a);
+			let len = a.clone().len();
+			p.reduce_vec(&mut a, len);
 			let b = p.serialize_vec(&a);
 			let c = p.deserialize_vec(&b);
 			prop_assert_eq!(a, c);
@@ -1433,124 +1374,5 @@ mod tests {
 				}
 			}
 		}
-	}
-
-	#[test]
-	fn lazy_mul_shoup_simd_works() {
-		let mut rng = thread_rng();
-		let q = Modulus::new(4611686018326724609).unwrap();
-
-		let vals = Uniform::new(0, q.p).sample_iter(rng).take(16).collect_vec();
-
-		let (a, b) = vals.split_at(8);
-		let b_shoup = q.shoup_vec(b.to_vec().as_slice());
-		let product = izip!(a, b, b_shoup.iter())
-			.map(|(_a, _b, _b_shoup)| q.mul_shoup(*_a, *_b, *_b_shoup))
-			.collect_vec();
-
-		let mut product_simd = q.lazy_mul_shoup_simd::<8>(
-			Simd::from_slice(a),
-			Simd::from_slice(b),
-			Simd::from_slice(b_shoup.as_slice()),
-		);
-		// reduce [0, 2p) -> [0, p)
-		product_simd = product_simd.simd_min(product_simd - Simd::splat(q.p));
-
-		assert_eq!(product, product_simd.as_array());
-	}
-
-	#[test]
-	fn lazy_reduce_simd_works() {
-		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
-		let q_mod = Modulus::new(p).unwrap();
-
-		let rng = thread_rng();
-		let a = Uniform::new(1 << 61, u64::MAX)
-			.sample_iter(rng)
-			.take(8)
-			.collect_vec();
-		let lazy_reduce_simd = q_mod.lazy_reduce_simd::<8>(Simd::from_slice(a.as_slice()));
-		let lazy_reduced = a.iter().map(|v| q_mod.lazy_reduce(*v)).collect_vec();
-
-		assert_eq!(lazy_reduce_simd.to_array().to_vec(), lazy_reduced);
-	}
-
-	#[test]
-	fn lazy_reduce_u128_opt_and_noopt_simd_works() {
-		let q_mod = Modulus::new(4611686018326724609).unwrap();
-
-		let rng = thread_rng();
-		let a = Uniform::new(0u128, q_mod.p as u128 * q_mod.p as u128)
-			.sample_iter(rng)
-			.take(8)
-			.collect_vec();
-
-		let mut hi = a.iter().map(|v| (v >> 64) as u64).collect_vec();
-		let mut lo = a.iter().map(|v| (v & ((1 << 64) - 1)) as u64).collect_vec();
-
-		let lazy_reduced_simd = q_mod.lazy_reduce_u128_simd::<8>(
-			Simd::from_slice(hi.as_slice()),
-			Simd::from_slice(lo.as_slice()),
-		);
-		let lazy_reduced_opt_simd = q_mod.lazy_reduce_opt_u128_simd::<8>(
-			Simd::from_slice(hi.as_slice()),
-			Simd::from_slice(lo.as_slice()),
-		);
-		let lazy_reduced = a.iter().map(|v| q_mod.lazy_reduce_u128(*v)).collect_vec();
-
-		// assert_eq!(lazy_reduced_opt_simd.to_array().to_vec(), lazy_reduced);
-		assert_eq!(lazy_reduced_simd.to_array().to_vec(), lazy_reduced);
-	}
-
-	#[test]
-	fn lazy_reduce_opt_and_noopt_simd_works() {
-		let q_mod = Modulus::new(4611686018326724609).unwrap();
-
-		let rng = thread_rng();
-		let a = Uniform::new(1 << (64 - q_mod.p.leading_zeros()), u64::MAX)
-			.sample_iter(rng)
-			.take(8)
-			.collect_vec();
-
-		let lazy_reduced_simd = q_mod.lazy_reduce_simd::<8>(Simd::from_slice(a.as_slice()));
-		let lazy_reduced_opt_simd = q_mod.lazy_reduce_opt_simd::<8>(Simd::from_slice(a.as_slice()));
-
-		let lazy_reduced = a.iter().map(|v| q_mod.lazy_reduce(*v)).collect_vec();
-
-		assert_eq!(lazy_reduced_opt_simd.to_array().to_vec(), lazy_reduced);
-		assert_eq!(lazy_reduced_simd.to_array().to_vec(), lazy_reduced);
-	}
-
-	#[test]
-	fn reduce_opt_128_simd_simulate() {
-		let p = generate_prime(62, 1 << 8, 1 << 62).unwrap();
-		let q_mod = Modulus::new(p).unwrap();
-
-		let mut rng = thread_rng();
-		let a = Uniform::new(0u128, p as u128 * p as u128).sample(&mut rng);
-
-		let a_hi = (a >> 64) as u64;
-		let a_lo = a as u64;
-
-		let low_mask = 4294967295u64;
-
-		// calc q
-		let qt_hi = ((q_mod.barrett_lo as u128 * a_hi as u128) >> 64) as u64;
-		let qt_lo = (q_mod.barrett_lo as u128 * a_hi as u128) as u64;
-
-		// a_lo << 2^s0
-		let qb_hi = (a_hi << q_mod.leading_zeros) + (a_lo >> (64 - q_mod.leading_zeros));
-		let qb_lo = a_lo << (q_mod.leading_zeros);
-
-		// calc c
-		let tmp = (qb_lo) + (low_mask & qt_lo);
-		let c = ((tmp >> 32) + (qt_lo >> 32)) >> 32;
-
-		let tmp = qt_hi + c;
-		let q = qb_hi + tmp;
-
-		let res = (a_lo).wrapping_sub(q.wrapping_mul(p));
-
-		assert_eq!(res, (a % p as u128) as u64);
 	}
 }

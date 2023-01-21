@@ -26,21 +26,6 @@ impl AddAssign<&Poly> for Poly {
 		debug_assert_eq!(self.ctx, p.ctx, "Incompatible contexts");
 		self.allow_variable_time_computations |= p.allow_variable_time_computations;
 
-		#[cfg(feature = "simd")]
-		izip!(
-			self.coefficients.outer_iter_mut(),
-			p.coefficients.outer_iter(),
-			self.ctx.q.iter()
-		)
-		.for_each(|(mut v1, v2, qi)| {
-			qi.add_vec_simd(
-				v1.as_slice_mut().unwrap(),
-				v2.as_slice().unwrap(),
-				self.ctx.degree,
-			);
-		});
-
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			izip!(
 				self.coefficients.outer_iter_mut(),
@@ -48,7 +33,11 @@ impl AddAssign<&Poly> for Poly {
 				self.ctx.q.iter()
 			)
 			.for_each(|(mut v1, v2, qi)| unsafe {
-				qi.add_vec_vt(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+				qi.add_vec_vt(
+					v1.as_slice_mut().unwrap(),
+					v2.as_slice().unwrap(),
+					self.ctx.degree,
+				)
 			});
 		} else {
 			izip!(
@@ -57,7 +46,11 @@ impl AddAssign<&Poly> for Poly {
 				self.ctx.q.iter()
 			)
 			.for_each(|(mut v1, v2, qi)| {
-				qi.add_vec(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+				qi.add_vec(
+					v1.as_slice_mut().unwrap(),
+					v2.as_slice().unwrap(),
+					self.ctx.degree,
+				)
 			});
 		}
 	}
@@ -95,21 +88,6 @@ impl SubAssign<&Poly> for Poly {
 		debug_assert_eq!(self.ctx, p.ctx, "Incompatible contexts");
 		self.allow_variable_time_computations |= p.allow_variable_time_computations;
 
-		#[cfg(feature = "simd")]
-		izip!(
-			self.coefficients.outer_iter_mut(),
-			p.coefficients.outer_iter(),
-			self.ctx.q.iter()
-		)
-		.for_each(|(mut v1, v2, qi)| {
-			qi.sub_vec_simd(
-				v1.as_slice_mut().unwrap(),
-				v2.as_slice().unwrap(),
-				self.ctx.degree,
-			)
-		});
-
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			izip!(
 				self.coefficients.outer_iter_mut(),
@@ -117,7 +95,11 @@ impl SubAssign<&Poly> for Poly {
 				self.ctx.q.iter()
 			)
 			.for_each(|(mut v1, v2, qi)| unsafe {
-				qi.sub_vec_vt(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+				qi.sub_vec_vt(
+					v1.as_slice_mut().unwrap(),
+					v2.as_slice().unwrap(),
+					self.ctx.degree,
+				)
 			});
 		} else {
 			izip!(
@@ -126,7 +108,11 @@ impl SubAssign<&Poly> for Poly {
 				self.ctx.q.iter()
 			)
 			.for_each(|(mut v1, v2, qi)| {
-				qi.sub_vec(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+				qi.sub_vec(
+					v1.as_slice_mut().unwrap(),
+					v2.as_slice().unwrap(),
+					self.ctx.degree,
+				)
 			});
 		}
 	}
@@ -166,21 +152,6 @@ impl MulAssign<&Poly> for Poly {
 
 		match p.representation {
 			Representation::Ntt => {
-				#[cfg(feature = "simd")]
-				izip!(
-					self.coefficients.outer_iter_mut(),
-					p.coefficients.outer_iter(),
-					self.ctx.q.iter()
-				)
-				.for_each(|(mut v1, v2, qi)| {
-					qi.mul_vec_simd(
-						v1.as_slice_mut().unwrap(),
-						v2.as_slice().unwrap(),
-						self.ctx.degree,
-					)
-				});
-
-				#[cfg(not(feature = "simd"))]
 				if self.allow_variable_time_computations {
 					unsafe {
 						izip!(
@@ -189,7 +160,11 @@ impl MulAssign<&Poly> for Poly {
 							self.ctx.q.iter()
 						)
 						.for_each(|(mut v1, v2, qi)| {
-							qi.mul_vec_vt(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap());
+							qi.mul_vec_vt(
+								v1.as_slice_mut().unwrap(),
+								v2.as_slice().unwrap(),
+								self.ctx.degree,
+							);
 						});
 					}
 				} else {
@@ -199,28 +174,15 @@ impl MulAssign<&Poly> for Poly {
 						self.ctx.q.iter()
 					)
 					.for_each(|(mut v1, v2, qi)| {
-						qi.mul_vec(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+						qi.mul_vec(
+							v1.as_slice_mut().unwrap(),
+							v2.as_slice().unwrap(),
+							self.ctx.degree,
+						)
 					});
 				}
 			}
 			Representation::NttShoup => {
-				#[cfg(feature = "simd")]
-				izip!(
-					self.coefficients.outer_iter_mut(),
-					p.coefficients.outer_iter(),
-					p.coefficients_shoup.as_ref().unwrap().outer_iter(),
-					self.ctx.q.iter()
-				)
-				.for_each(|(mut v1, v2, v2_shoup, qi)| {
-					qi.mul_shoup_vec_simd(
-						v1.as_slice_mut().unwrap(),
-						v2.as_slice().unwrap(),
-						v2_shoup.as_slice().unwrap(),
-						self.ctx.degree,
-					)
-				});
-
-				#[cfg(not(feature = "simd"))]
 				if self.allow_variable_time_computations {
 					izip!(
 						self.coefficients.outer_iter_mut(),
@@ -233,6 +195,7 @@ impl MulAssign<&Poly> for Poly {
 							v1.as_slice_mut().unwrap(),
 							v2.as_slice().unwrap(),
 							v2_shoup.as_slice().unwrap(),
+							self.ctx.degree,
 						)
 					});
 				} else {
@@ -247,6 +210,7 @@ impl MulAssign<&Poly> for Poly {
 							v1.as_slice_mut().unwrap(),
 							v2.as_slice().unwrap(),
 							v2_shoup.as_slice().unwrap(),
+							self.ctx.degree,
 						)
 					});
 				}
@@ -272,20 +236,6 @@ impl MulAssign<&BigUint> for Poly {
 		.unwrap();
 		q.change_representation(Representation::Ntt);
 
-		#[cfg(feature = "simd")]
-		izip!(
-			self.coefficients.outer_iter_mut(),
-			q.coefficients.outer_iter(),
-			self.ctx.q.iter()
-		)
-		.for_each(|(mut v1, v2, qi)| {
-			qi.mul_vec_simd(
-				v1.as_slice_mut().unwrap(),
-				v2.as_slice().unwrap(),
-				self.ctx.degree,
-			)
-		});
-
 		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			unsafe {
@@ -295,7 +245,11 @@ impl MulAssign<&BigUint> for Poly {
 					self.ctx.q.iter()
 				)
 				.for_each(|(mut v1, v2, qi)| {
-					qi.mul_vec_vt(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+					qi.mul_vec_vt(
+						v1.as_slice_mut().unwrap(),
+						v2.as_slice().unwrap(),
+						self.ctx.degree,
+					)
 				});
 			}
 		} else {
@@ -305,7 +259,11 @@ impl MulAssign<&BigUint> for Poly {
 				self.ctx.q.iter()
 			)
 			.for_each(|(mut v1, v2, qi)| {
-				qi.mul_vec(v1.as_slice_mut().unwrap(), v2.as_slice().unwrap())
+				qi.mul_vec(
+					v1.as_slice_mut().unwrap(),
+					v2.as_slice().unwrap(),
+					self.ctx.degree,
+				)
 			});
 		}
 	}
@@ -362,17 +320,15 @@ impl Neg for &Poly {
 		assert!(!self.has_lazy_coefficients);
 		let mut out = self.clone();
 
-		#[cfg(feature = "simd")]
-		izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter())
-			.for_each(|(mut v1, qi)| qi.neg_vec_simd(v1.as_slice_mut().unwrap(), out.ctx.degree));
-
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
-			izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter())
-				.for_each(|(mut v1, qi)| unsafe { qi.neg_vec_vt(v1.as_slice_mut().unwrap()) });
+			izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter()).for_each(
+				|(mut v1, qi)| unsafe {
+					qi.neg_vec_vt(v1.as_slice_mut().unwrap(), self.ctx.degree)
+				},
+			);
 		} else {
 			izip!(out.coefficients.outer_iter_mut(), out.ctx.q.iter())
-				.for_each(|(mut v1, qi)| qi.neg_vec(v1.as_slice_mut().unwrap()));
+				.for_each(|(mut v1, qi)| qi.neg_vec(v1.as_slice_mut().unwrap(), self.ctx.degree));
 		}
 		out
 	}
@@ -384,17 +340,15 @@ impl Neg for Poly {
 	fn neg(mut self) -> Poly {
 		assert!(!self.has_lazy_coefficients);
 
-		#[cfg(feature = "simd")]
-		izip!(self.coefficients.outer_iter_mut(), self.ctx.q.iter())
-			.for_each(|(mut v1, qi)| qi.neg_vec_simd(v1.as_slice_mut().unwrap(), self.ctx.degree));
-
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
-			izip!(self.coefficients.outer_iter_mut(), self.ctx.q.iter())
-				.for_each(|(mut v1, qi)| unsafe { qi.neg_vec_vt(v1.as_slice_mut().unwrap()) });
+			izip!(self.coefficients.outer_iter_mut(), self.ctx.q.iter()).for_each(
+				|(mut v1, qi)| unsafe {
+					qi.neg_vec_vt(v1.as_slice_mut().unwrap(), self.ctx.degree)
+				},
+			);
 		} else {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.q.iter())
-				.for_each(|(mut v1, qi)| qi.neg_vec(v1.as_slice_mut().unwrap()));
+				.for_each(|(mut v1, qi)| qi.neg_vec(v1.as_slice_mut().unwrap(), self.ctx.degree));
 		}
 		self
 	}
@@ -575,7 +529,7 @@ mod tests {
 				let r = &p + &q;
 				assert_eq!(r.representation, Representation::PowerBasis);
 				let mut a = Vec::<u64>::from(&p);
-				m.add_vec(&mut a, &Vec::<u64>::from(&q));
+				m.add_vec(&mut a, &Vec::<u64>::from(&q), 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 
 				let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
@@ -583,7 +537,7 @@ mod tests {
 				let r = &p + &q;
 				assert_eq!(r.representation, Representation::Ntt);
 				let mut a = Vec::<u64>::from(&p);
-				m.add_vec(&mut a, &Vec::<u64>::from(&q));
+				m.add_vec(&mut a, &Vec::<u64>::from(&q), 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
@@ -594,7 +548,7 @@ mod tests {
 			let b = Vec::<u64>::from(&q);
 			for i in 0..MODULI.len() {
 				let m = Modulus::new(MODULI[i]).unwrap();
-				m.add_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8])
+				m.add_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8], 8)
 			}
 			let r = &p + &q;
 			assert_eq!(r.representation, Representation::PowerBasis);
@@ -616,7 +570,7 @@ mod tests {
 				let r = &p - &q;
 				assert_eq!(r.representation, Representation::PowerBasis);
 				let mut a = Vec::<u64>::from(&p);
-				m.sub_vec(&mut a, &Vec::<u64>::from(&q));
+				m.sub_vec(&mut a, &Vec::<u64>::from(&q), 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 
 				let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
@@ -624,7 +578,7 @@ mod tests {
 				let r = &p - &q;
 				assert_eq!(r.representation, Representation::Ntt);
 				let mut a = Vec::<u64>::from(&p);
-				m.sub_vec(&mut a, &Vec::<u64>::from(&q));
+				m.sub_vec(&mut a, &Vec::<u64>::from(&q), 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
@@ -635,7 +589,7 @@ mod tests {
 			let b = Vec::<u64>::from(&q);
 			for i in 0..MODULI.len() {
 				let m = Modulus::new(MODULI[i]).unwrap();
-				m.sub_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8])
+				m.sub_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8], 8)
 			}
 			let r = &p - &q;
 			assert_eq!(r.representation, Representation::PowerBasis);
@@ -657,7 +611,7 @@ mod tests {
 				let r = &p * &q;
 				assert_eq!(r.representation, Representation::Ntt);
 				let mut a = Vec::<u64>::from(&p);
-				m.mul_vec(&mut a, &Vec::<u64>::from(&q));
+				m.mul_vec(&mut a, &Vec::<u64>::from(&q), 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
@@ -668,7 +622,7 @@ mod tests {
 			let b = Vec::<u64>::from(&q);
 			for i in 0..MODULI.len() {
 				let m = Modulus::new(MODULI[i]).unwrap();
-				m.mul_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8])
+				m.mul_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8], 8)
 			}
 			let r = &p * &q;
 			assert_eq!(r.representation, Representation::Ntt);
@@ -690,7 +644,7 @@ mod tests {
 				let r = &p * &q;
 				assert_eq!(r.representation, Representation::Ntt);
 				let mut a = Vec::<u64>::from(&p);
-				m.mul_vec(&mut a, &Vec::<u64>::from(&q));
+				m.mul_vec(&mut a, &Vec::<u64>::from(&q), 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
@@ -701,7 +655,7 @@ mod tests {
 			let b = Vec::<u64>::from(&q);
 			for i in 0..MODULI.len() {
 				let m = Modulus::new(MODULI[i]).unwrap();
-				m.mul_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8])
+				m.mul_vec(&mut a[i * 8..(i + 1) * 8], &b[i * 8..(i + 1) * 8], 8)
 			}
 			let r = &p * &q;
 			assert_eq!(r.representation, Representation::Ntt);
@@ -722,14 +676,14 @@ mod tests {
 				let r = -&p;
 				assert_eq!(r.representation, Representation::PowerBasis);
 				let mut a = Vec::<u64>::from(&p);
-				m.neg_vec(&mut a);
+				m.neg_vec(&mut a, 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 
 				let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 				let r = -&p;
 				assert_eq!(r.representation, Representation::Ntt);
 				let mut a = Vec::<u64>::from(&p);
-				m.neg_vec(&mut a);
+				m.neg_vec(&mut a, 8);
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
@@ -738,7 +692,7 @@ mod tests {
 			let mut a = Vec::<u64>::from(&p);
 			for i in 0..MODULI.len() {
 				let m = Modulus::new(MODULI[i]).unwrap();
-				m.neg_vec(&mut a[i * 8..(i + 1) * 8])
+				m.neg_vec(&mut a[i * 8..(i + 1) * 8], 8)
 			}
 			let r = -&p;
 			assert_eq!(r.representation, Representation::PowerBasis);

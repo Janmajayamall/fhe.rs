@@ -22,10 +22,7 @@ use itertools::{izip, Itertools};
 use ndarray::{s, Array2, ArrayView2, Axis};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use std::{
-	simd::{LaneCount, Simd, SupportedLaneCount},
-	sync::Arc,
-};
+use std::sync::Arc;
 use zeroize::{Zeroize, Zeroizing};
 
 /// Possible representations of the underlying polynomial.
@@ -304,14 +301,9 @@ impl Poly {
 
 	/// Computes the forward Ntt on the coefficients
 	fn ntt_forward(&mut self) {
-		#[cfg(feature = "simd")]
-		izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
-			.for_each(|(mut v, op)| op.forward_simd(v.as_slice_mut().unwrap()));
-
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
-				.for_each(|(mut v, op)| unsafe { op.forward_vt(v.as_mut_ptr()) });
+				.for_each(|(mut v, op)| unsafe { op.forward_vt(v.as_slice_mut().unwrap()) });
 		} else {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
 				.for_each(|(mut v, op)| op.forward(v.as_slice_mut().unwrap()));
@@ -320,14 +312,9 @@ impl Poly {
 
 	/// Computes the backward Ntt on the coefficients
 	fn ntt_backward(&mut self) {
-		#[cfg(feature = "simd")]
-		izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
-			.for_each(|(mut v, op)| op.backward_simd(v.as_slice_mut().unwrap()));
-
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
-				.for_each(|(mut v, op)| unsafe { op.backward_vt(v.as_mut_ptr()) });
+				.for_each(|(mut v, op)| unsafe { op.backward_vt(v.as_slice_mut().unwrap()) });
 		} else {
 			izip!(self.coefficients.outer_iter_mut(), self.ctx.ops.iter())
 				.for_each(|(mut v, op)| op.backward(v.as_slice_mut().unwrap()));
@@ -416,17 +403,8 @@ impl Poly {
 					.unwrap()
 					.clone_from_slice(power_basis_coefficients);
 
-				#[cfg(feature = "simd")]
-				{
-					qi.lazy_reduce_vec_simd(p.as_slice_mut().unwrap(), ctx.degree);
-					op.forward_lazy_simd(p.as_slice_mut().unwrap());
-				}
-
-				#[cfg(not(feature = "simd"))]
-				{
-					qi.lazy_reduce_vec(p.as_slice_mut().unwrap());
-					op.forward_vt_lazy(p.as_mut_ptr());
-				}
+				qi.lazy_reduce_vec(p.as_slice_mut().unwrap(), ctx.degree);
+				op.forward_vt_lazy(p.as_slice_mut().unwrap());
 			},
 		);
 		Self {

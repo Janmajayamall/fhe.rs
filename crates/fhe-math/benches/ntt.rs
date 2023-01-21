@@ -22,12 +22,12 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 
 			group.bench_function(
 				BenchmarkId::new("forward_vt", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| unsafe { op.forward_vt(a.as_mut_ptr()) }),
+				|b| b.iter(|| unsafe { op.forward_vt(a.as_mut_slice()) }),
 			);
 
 			group.bench_function(
 				BenchmarkId::new("forward_vt_lazy", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| unsafe { op.forward_vt_lazy(a.as_mut_ptr()) }),
+				|b| b.iter(|| unsafe { op.forward_vt_lazy(a.as_mut_slice()) }),
 			);
 
 			group.bench_function(
@@ -37,40 +37,7 @@ pub fn ntt_benchmark(c: &mut Criterion) {
 
 			group.bench_function(
 				BenchmarkId::new("backward_vt", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| unsafe { op.backward_vt(a.as_mut_ptr()) }),
-			);
-
-			group.bench_function(
-				BenchmarkId::new("forward_simd", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| op.forward_simd(&mut a)),
-			);
-
-			group.bench_function(
-				BenchmarkId::new("forward_lazy_simd", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| unsafe { op.forward_lazy_simd(&mut a) }),
-			);
-
-			group.bench_function(
-				BenchmarkId::new(
-					"forward_simd_swizzle",
-					format!("{}/{}", vector_size, p_nbits),
-				),
-				|b| b.iter(|| op.forward_simd_swizzle(&mut a)),
-			);
-
-			group.bench_function(
-				BenchmarkId::new("backward_simd", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| op.backward_simd(&mut a)),
-			);
-
-			group.bench_function(
-				BenchmarkId::new("forward_hexl", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| op.forward_hexl(&mut a)),
-			);
-
-			group.bench_function(
-				BenchmarkId::new("backward_hexl", format!("{}/{}", vector_size, p_nbits)),
-				|b| b.iter(|| op.backward_hexl(&mut a)),
+				|b| b.iter(|| unsafe { op.backward_vt(a.as_mut_slice()) }),
 			);
 		}
 	}

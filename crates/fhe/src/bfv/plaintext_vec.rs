@@ -60,7 +60,7 @@ impl FheEncoderVariableTime<&[u64]> for PlaintextVec {
 							for i in 0..slice.len() {
 								v[par.matrix_reps_index_map[i]] = slice[i];
 							}
-							par.op.as_ref().unwrap().backward_vt(v.as_mut_ptr());
+							par.op.as_ref().unwrap().backward_vt(v.as_mut_slice());
 						}
 					};
 

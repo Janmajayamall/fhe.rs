@@ -1,18 +1,10 @@
 //! Number-Theoretic Transform in ZZ_q.
 
-use std::{
-	ops::BitAnd,
-	simd::{
-		simd_swizzle, u64x8, LaneCount, Simd, SimdOrd, SimdPartialEq, SimdPartialOrd,
-		SupportedLaneCount,
-		Which::{First, Second},
-	},
-	vec,
-};
+use std::{ops::BitAnd, vec};
 
 use super::Modulus;
 use fhe_util::is_prime;
-#[cfg(target_arch = "x86")]
+#[cfg(target_arch = "x86_64")]
 use hexl_rs::Ntt;
 use itertools::izip;
 use rand::{Rng, SeedableRng};
@@ -31,7 +23,6 @@ pub fn supports_ntt(p: u64, n: usize) -> bool {
 /// Number-Theoretic Transform operator.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NttOperator {
-	#[cfg(not(target_arch = "x86"))]
 	p: Modulus,
 	p_twice: u64,
 	size: usize,
@@ -43,7 +34,7 @@ pub struct NttOperator {
 	size_inv: u64,
 	size_inv_shoup: u64,
 
-	#[cfg(target_arch = "x86")]
+	#[cfg(target_arch = "x86_64")]
 	ntt_hexl: hexl_rs::Ntt,
 }
 
@@ -86,7 +77,7 @@ impl NttOperator {
 			let omegas_shoup = p.shoup_vec(&omegas);
 			let zetas_inv_shoup = p.shoup_vec(&zetas_inv);
 
-			#[cfg(target_arch = "x86")]
+			#[cfg(target_arch = "x86_64")]
 			let ntt_hexl = hexl_rs::Ntt::new(size as u64, p.p);
 
 			Some(Self {
@@ -100,7 +91,7 @@ impl NttOperator {
 				zetas_inv_shoup: zetas_inv_shoup.into_boxed_slice(),
 				size_inv,
 				size_inv_shoup: p.shoup(size_inv),
-				#[cfg(target_arch = "x86")]
+				#[cfg(target_arch = "x86_64")]
 				ntt_hexl,
 			})
 		}
@@ -108,49 +99,8 @@ impl NttOperator {
 
 	/// Compute the forward NTT in place.
 	/// Aborts if a is not of the size handled by the operator.
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn forward(&self, a: &mut [u64]) {
-		self.forward_native(a);
-	}
-
-	/// Compute the backward NTT in place.
-	/// Aborts if a is not of the size handled by the operator.
-	pub fn backward(&self, a: &mut [u64]) {
-		self.backward_native(a)
-	}
-
-	/// Compute the forward NTT in place in variable time in a lazily fashion.
-	/// This means that the output coefficients may be up to 4 times the
-	/// modulus.
-	///
-	/// # Safety
-	/// This function assumes that a_ptr points to at least `size` elements.
-	/// This function is not constant time and its timing may reveal information
-	/// about the value being reduced.
-	pub unsafe fn forward_vt_lazy(&self, a_ptr: *mut u64) {
-		self.forward_vt_lazy_native(a_ptr)
-	}
-
-	/// Compute the forward NTT in place in variable time.
-	///
-	/// # Safety
-	/// This function assumes that a_ptr points to at least `size` elements.
-	/// This function is not constant time and its timing may reveal information
-	/// about the value being reduced.
-	pub unsafe fn forward_vt(&self, a_ptr: *mut u64) {
-		self.forward_vt_native(a_ptr);
-	}
-
-	/// Compute the backward NTT in place in variable time.
-	///
-	/// # Safety
-	/// This function assumes that a_ptr points to at least `size` elements.
-	/// This function is not constant time and its timing may reveal information
-	/// about the value being reduced.
-	pub unsafe fn backward_vt(&self, a_ptr: *mut u64) {
-		self.backward_vt_native(a_ptr);
-	}
-
-	pub fn forward_native(&self, a: &mut [u64]) {
 		debug_assert_eq!(a.len(), self.size);
 
 		let n = self.size;
@@ -194,7 +144,10 @@ impl NttOperator {
 		}
 	}
 
-	pub fn backward_native(&self, a: &mut [u64]) {
+	/// Compute the backward NTT in place.
+	/// Aborts if a is not of the size handled by the operator.
+	#[cfg(not(target_arch = "x86_64"))]
+	pub fn backward(&self, a: &mut [u64]) {
 		debug_assert_eq!(a.len(), self.size);
 
 		let a_ptr = a.as_mut_ptr();
@@ -239,7 +192,16 @@ impl NttOperator {
 			.for_each(|ai| *ai = self.p.mul_shoup(*ai, self.size_inv, self.size_inv_shoup));
 	}
 
-	pub unsafe fn forward_vt_lazy_native(&self, a_ptr: *mut u64) {
+	/// Compute the forward NTT in place in variable time in a lazily fashion.
+	/// This means that the output coefficients may be up to 4 times the
+	/// modulus.
+	///
+	/// # Safety
+	/// This function assumes that a_ptr points to at least `size` elements.
+	/// This function is not constant time and its timing may reveal information
+	/// about the value being reduced.
+	#[cfg(not(target_arch = "x86_64"))]
+	pub unsafe fn forward_vt_lazy(&self, a_ptr: *mut u64) {
 		let mut l = self.size >> 1;
 		let mut m = 1;
 		let mut k = 1;
@@ -276,14 +238,28 @@ impl NttOperator {
 		}
 	}
 
-	pub unsafe fn forward_vt_native(&self, a_ptr: *mut u64) {
-		self.forward_vt_lazy(a_ptr);
+	/// Compute the forward NTT in place in variable time.
+	///
+	/// # Safety
+	/// This function assumes that a_ptr points to at least `size` elements.
+	/// This function is not constant time and its timing may reveal information
+	/// about the value being reduced.
+	#[cfg(not(target_arch = "x86_64"))]
+	pub unsafe fn forward_vt(&self, a_ptr: *mut u64) {
+		self.forward_vt_lazy_native(a_ptr);
 		for i in 0..self.size {
 			*a_ptr.add(i) = self.reduce3_vt(*a_ptr.add(i))
 		}
 	}
 
-	pub unsafe fn backward_vt_native(&self, a_ptr: *mut u64) {
+	/// Compute the backward NTT in place in variable time.
+	///
+	/// # Safety
+	/// This function assumes that a_ptr points to at least `size` elements.
+	/// This function is not constant time and its timing may reveal information
+	/// about the value being reduced.
+	#[cfg(not(target_arch = "x86_64"))]
+	pub unsafe fn backward_vt(&self, a_ptr: *mut u64) {
 		let mut k = 0;
 		let mut m = self.size >> 1;
 		let mut l = 1;
@@ -440,11 +416,28 @@ impl NttOperator {
 		(p.pow(a, n as u64) == 1) && (p.pow(a, (n / 2) as u64) != 1)
 	}
 
-	pub fn forward_hexl(&self, a: &mut [u64]) {
+	#[cfg(target_arch = "x86_64")]
+	pub fn forward(&self, a: &mut [u64]) {
 		self.ntt_hexl.forward(a, 1, 1);
 	}
 
-	pub fn backward_hexl(&self, a: &mut [u64]) {
+	#[cfg(target_arch = "x86_64")]
+	pub fn backward(&self, a: &mut [u64]) {
+		self.ntt_hexl.backward(a, 1, 1);
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	pub fn forward_vt_lazy(&self, a: &mut [u64]) {
+		self.ntt_hexl.forward(a, 1, 4);
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	pub fn forward_vt(&self, a: &mut [u64]) {
+		self.ntt_hexl.forward(a, 1, 1);
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	pub fn backward_vt(&self, a: &mut [u64]) {
 		self.ntt_hexl.backward(a, 1, 1);
 	}
 }
@@ -494,13 +487,13 @@ mod tests {
 						op.forward(&mut a);
 						assert_ne!(a, a_clone);
 
-						unsafe { op.forward_vt(b.as_mut_ptr()) }
+						unsafe { op.forward_vt(&mut b) }
 						assert_eq!(a, b);
 
 						op.backward(&mut a);
 						assert_eq!(a, a_clone);
 
-						unsafe { op.backward_vt(b.as_mut_ptr()) }
+						unsafe { op.backward_vt(&mut b) }
 						assert_eq!(a, b);
 					}
 				}
@@ -527,8 +520,8 @@ mod tests {
 						op.forward(&mut a);
 
 						unsafe {
-							op.forward_vt_lazy(a_lazy.as_mut_ptr());
-							q.reduce_vec(&mut a_lazy);
+							op.forward_vt_lazy(&mut a_lazy);
+							q.reduce_vec(&mut a_lazy, size);
 						}
 
 						assert_eq!(a, a_lazy);

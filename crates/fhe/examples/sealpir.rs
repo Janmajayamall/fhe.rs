@@ -19,7 +19,7 @@ use fhe_util::{div_ceil, ilog2, inverse, transcode_bidirectional, transcode_to_b
 use indicatif::HumanBytes;
 use itertools::Itertools;
 use rand::{rngs::OsRng, thread_rng, RngCore};
-use std::{env, error::Error, process::exit, sync::Arc};
+use std::{collections::HashMap, env, error::Error, process::exit, sync::Arc};
 use util::{
 	encode_database, generate_database, number_elements_per_plaintext,
 	timeit::{timeit, timeit_n},
@@ -309,7 +309,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 		poly0.truncate(params.degree());
 		poly1.truncate(params.degree());
 
-		let ctx = Arc::new(Context::new(&params.moduli()[..1], params.degree())?);
+		let ctx = Arc::new(Context::new(
+			&params.moduli()[..1],
+			params.degree(),
+			&mut HashMap::default(),
+		)?);
 		let ct = bfv::Ciphertext::new(
 			vec![
 				Poly::try_convert_from(poly0, &ctx, true, Representation::Ntt)?,

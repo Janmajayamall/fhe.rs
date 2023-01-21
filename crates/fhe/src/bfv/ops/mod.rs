@@ -298,7 +298,7 @@ mod tests {
 				let a = params.plaintext.random_vec(params.degree(), &mut rng);
 				let b = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut c = a.clone();
-				params.plaintext.add_vec(&mut c, &b);
+				params.plaintext.add_vec(&mut c, &b, params.degree());
 
 				let sk = SecretKey::random(&params, &mut rng);
 
@@ -336,7 +336,7 @@ mod tests {
 				let a = params.plaintext.random_vec(params.degree(), &mut rng);
 				let b = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut c = a.clone();
-				params.plaintext.add_vec(&mut c, &b);
+				params.plaintext.add_vec(&mut c, &b, params.degree());
 
 				let sk = SecretKey::random(&params, &mut rng);
 
@@ -385,10 +385,10 @@ mod tests {
 			for _ in 0..50 {
 				let a = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut a_neg = a.clone();
-				params.plaintext.neg_vec(&mut a_neg);
+				params.plaintext.neg_vec(&mut a_neg, params.degree());
 				let b = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut c = a.clone();
-				params.plaintext.sub_vec(&mut c, &b);
+				params.plaintext.sub_vec(&mut c, &b, params.degree());
 
 				let sk = SecretKey::random(&params, &mut rng);
 
@@ -430,10 +430,10 @@ mod tests {
 			for _ in 0..50 {
 				let a = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut a_neg = a.clone();
-				params.plaintext.neg_vec(&mut a_neg);
+				params.plaintext.neg_vec(&mut a_neg, params.degree());
 				let b = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut c = a.clone();
-				params.plaintext.sub_vec(&mut c, &b);
+				params.plaintext.sub_vec(&mut c, &b, params.degree());
 
 				let sk = SecretKey::random(&params, &mut rng);
 
@@ -481,7 +481,7 @@ mod tests {
 			for _ in 0..50 {
 				let a = params.plaintext.random_vec(params.degree(), &mut rng);
 				let mut c = a.clone();
-				params.plaintext.neg_vec(&mut c);
+				params.plaintext.neg_vec(&mut c, params.degree());
 
 				let sk = SecretKey::random(&params, &mut rng);
 				for encoding in [Encoding::poly(), Encoding::simd()] {
@@ -537,7 +537,7 @@ mod tests {
 						}
 						EncodingEnum::Simd => {
 							c = a.clone();
-							params.plaintext.mul_vec(&mut c, &b);
+							params.plaintext.mul_vec(&mut c, &b, params.degree());
 						}
 					}
 
@@ -572,7 +572,7 @@ mod tests {
 				let v1 = par.plaintext.random_vec(par.degree(), &mut rng);
 				let v2 = par.plaintext.random_vec(par.degree(), &mut rng);
 				let mut expected = v1.clone();
-				par.plaintext.mul_vec(&mut expected, &v2);
+				par.plaintext.mul_vec(&mut expected, &v2, par.degree());
 
 				let sk = SecretKey::random(&par, &mut OsRng);
 				let pt1 = Plaintext::try_encode(&v1, Encoding::simd(), &par)?;
@@ -588,7 +588,7 @@ mod tests {
 				assert_eq!(Vec::<u64>::try_decode(&pt, Encoding::simd())?, expected);
 
 				let e = expected.clone();
-				par.plaintext.mul_vec(&mut expected, &e);
+				par.plaintext.mul_vec(&mut expected, &e, par.degree());
 				println!("Noise: {}", unsafe { sk.measure_noise(&ct4)? });
 				let pt = sk.try_decrypt(&ct4)?;
 				assert_eq!(Vec::<u64>::try_decode(&pt, Encoding::simd())?, expected);
@@ -606,7 +606,7 @@ mod tests {
 			// computed correctly.
 			let v = par.plaintext.random_vec(par.degree(), &mut rng);
 			let mut expected = v.clone();
-			par.plaintext.mul_vec(&mut expected, &v);
+			par.plaintext.mul_vec(&mut expected, &v, par.degree());
 
 			let sk = SecretKey::random(&par, &mut OsRng);
 			let pt = Plaintext::try_encode(&v, Encoding::simd(), &par)?;

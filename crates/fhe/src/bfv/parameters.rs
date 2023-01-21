@@ -360,7 +360,11 @@ impl BfvParametersBuilder {
 
 		let op = NttOperator::new(&plaintext_modulus, self.degree);
 
-		let plaintext_ctx = Arc::new(Context::new(&moduli[..1], self.degree)?);
+		let plaintext_ctx = Arc::new(Context::new(
+			&moduli[..1],
+			self.degree,
+			&mut HashMap::default(),
+		)?);
 
 		let mut delta_rests = vec![];
 		for m in &moduli {
@@ -375,7 +379,14 @@ impl BfvParametersBuilder {
 		let mut mul_params = Vec::with_capacity(moduli.len());
 		for i in 0..moduli.len() {
 			let rns = RnsContext::new(&moduli[..moduli.len() - i]).unwrap();
-			let ctx_i = Arc::new(Context::new(&moduli[..moduli.len() - i], self.degree).unwrap());
+			let ctx_i = Arc::new(
+				Context::new(
+					&moduli[..moduli.len() - i],
+					self.degree,
+					&mut HashMap::default(),
+				)
+				.unwrap(),
+			);
 			let mut p = Poly::try_convert_from(
 				&[rns.lift((&delta_rests).into())],
 				&ctx_i,
@@ -404,7 +415,11 @@ impl BfvParametersBuilder {
 			let mut mul_1_moduli = vec![];
 			mul_1_moduli.append(&mut moduli[..moduli_sizes.len() - i].to_vec());
 			mul_1_moduli.append(&mut extended_basis[..n_moduli].to_vec());
-			let mul_1_ctx = Arc::new(Context::new(&mul_1_moduli, self.degree)?);
+			let mul_1_ctx = Arc::new(Context::new(
+				&mul_1_moduli,
+				self.degree,
+				&mut HashMap::default(),
+			)?);
 			mul_params.push(MultiplicationParameters::new(
 				&ctx_i,
 				&mul_1_ctx,

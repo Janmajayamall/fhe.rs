@@ -1,6 +1,10 @@
 //! Number-Theoretic Transform in ZZ_q.
 
-use std::{ops::BitAnd, vec};
+use std::{
+	cmp::{Eq, PartialEq},
+	ops::BitAnd,
+	vec,
+};
 
 use super::Modulus;
 use fhe_util::is_prime;
@@ -21,7 +25,7 @@ pub fn supports_ntt(p: u64, n: usize) -> bool {
 }
 
 /// Number-Theoretic Transform operator.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct NttOperator {
 	p: Modulus,
 	p_twice: u64,
@@ -34,9 +38,25 @@ pub struct NttOperator {
 	size_inv: u64,
 	size_inv_shoup: u64,
 
-	#[cfg(target_arch = "x86_64")]
 	ntt_hexl: hexl_rs::Ntt,
 }
+
+impl PartialEq for NttOperator {
+	fn eq(&self, other: &Self) -> bool {
+		self.p == other.p
+			&& self.p_twice == other.p_twice
+			&& self.size == other.size
+			&& self.omegas == other.omegas
+			&& self.omegas_shoup == other.omegas_shoup
+			&& self.omegas_inv == other.omegas_inv
+			&& self.zetas_inv == other.zetas_inv
+			&& self.zetas_inv_shoup == other.zetas_inv_shoup
+			&& self.size_inv == other.size_inv
+			&& self.size_inv_shoup == other.size_inv_shoup
+	}
+}
+
+impl Eq for NttOperator {}
 
 impl NttOperator {
 	/// Create an NTT operator given a modulus for a specific size.
@@ -444,6 +464,7 @@ impl NttOperator {
 
 #[cfg(test)]
 mod tests {
+	use hexl_rs::Ntt;
 	use rand::thread_rng;
 
 	use super::{supports_ntt, NttOperator};
@@ -529,5 +550,12 @@ mod tests {
 				}
 			}
 		}
+	}
+
+	#[test]
+	fn clone_works() {
+		let n = NttOperator::new(&Modulus::new(1553).unwrap(), 8).unwrap();
+		let n1 = n.clone();
+		dbg!(n, n1);
 	}
 }

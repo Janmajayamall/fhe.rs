@@ -236,7 +236,6 @@ impl MulAssign<&BigUint> for Poly {
 		.unwrap();
 		q.change_representation(Representation::Ntt);
 
-		#[cfg(not(feature = "simd"))]
 		if self.allow_variable_time_computations {
 			unsafe {
 				izip!(
@@ -512,7 +511,7 @@ mod tests {
 		rq::{Context, Poly, Representation},
 		zq::{primes::supports_opt, Modulus},
 	};
-	use std::{error::Error, sync::Arc};
+	use std::{collections::HashMap, error::Error, sync::Arc};
 
 	static MODULI: &[u64; 3] = &[1153, 4611686018326724609, 4611686018309947393];
 
@@ -521,7 +520,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..100 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8)?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
 				let m = Modulus::new(*modulus).unwrap();
 
 				let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
@@ -541,7 +540,7 @@ mod tests {
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8)?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let q = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let mut a = Vec::<u64>::from(&p);
@@ -562,7 +561,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..100 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8)?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
 				let m = Modulus::new(*modulus).unwrap();
 
 				let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
@@ -582,7 +581,7 @@ mod tests {
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8)?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let q = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let mut a = Vec::<u64>::from(&p);
@@ -603,7 +602,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..100 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8)?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
 				let m = Modulus::new(*modulus).unwrap();
 
 				let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
@@ -615,7 +614,7 @@ mod tests {
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8)?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
 			let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let q = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let mut a = Vec::<u64>::from(&p);
@@ -636,7 +635,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..100 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8)?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
 				let m = Modulus::new(*modulus).unwrap();
 
 				let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
@@ -648,7 +647,7 @@ mod tests {
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8)?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
 			let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let q = Poly::random(&ctx, Representation::NttShoup, &mut rng);
 			let mut a = Vec::<u64>::from(&p);
@@ -669,7 +668,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..100 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8)?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
 				let m = Modulus::new(*modulus).unwrap();
 
 				let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
@@ -687,7 +686,7 @@ mod tests {
 				assert_eq!(Vec::<u64>::from(&r), a);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8)?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let mut a = Vec::<u64>::from(&p);
 			for i in 0..MODULI.len() {
@@ -710,7 +709,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..20 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8)?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
 
 				for len in 1..50 {
 					let p = (0..len)
@@ -727,7 +726,7 @@ mod tests {
 				}
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8)?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
 			for len in 1..50 {
 				let p = (0..len)
 					.map(|_| Poly::random(&ctx, Representation::Ntt, &mut rng))

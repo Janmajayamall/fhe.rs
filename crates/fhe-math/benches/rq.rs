@@ -4,6 +4,7 @@ use fhe_math::rq::*;
 use itertools::{izip, Itertools};
 use rand::thread_rng;
 use std::{
+	collections::HashMap,
 	ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 	sync::Arc,
 	time::Duration,
@@ -36,7 +37,8 @@ macro_rules! bench_op {
 		let mut rng = thread_rng();
 
 		for degree in DEGREE {
-			let ctx = Arc::new(Context::new(&MODULI[..1], *degree).unwrap());
+			let ctx =
+				Arc::new(Context::new(&MODULI[..1], *degree, &mut HashMap::default()).unwrap());
 			let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let mut q = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			if $vt {
@@ -64,7 +66,8 @@ macro_rules! bench_op_unary {
 		let mut rng = thread_rng();
 
 		for degree in DEGREE {
-			let ctx = Arc::new(Context::new(&MODULI[..1], *degree).unwrap());
+			let ctx =
+				Arc::new(Context::new(&MODULI[..1], *degree, &mut HashMap::default()).unwrap());
 			let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let mut q = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			if $vt {
@@ -92,7 +95,8 @@ macro_rules! bench_op_assign {
 		let mut rng = thread_rng();
 
 		for degree in DEGREE {
-			let ctx = Arc::new(Context::new(&MODULI[..1], *degree).unwrap());
+			let ctx =
+				Arc::new(Context::new(&MODULI[..1], *degree, &mut HashMap::default()).unwrap());
 			let mut p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let mut q = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			if $vt {
@@ -126,7 +130,8 @@ pub fn rq_dot_product(c: &mut Criterion) {
 	let mut rng = thread_rng();
 	for degree in DEGREE {
 		for i in [1, 4] {
-			let ctx = Arc::new(Context::new(&MODULI[..i], *degree).unwrap());
+			let ctx =
+				Arc::new(Context::new(&MODULI[..i], *degree, &mut HashMap::default()).unwrap());
 			let p_vec = (0..256)
 				.map(|_| Poly::random(&ctx, Representation::Ntt, &mut rng))
 				.collect_vec();
@@ -184,7 +189,9 @@ pub fn rq_benchmark(c: &mut Criterion) {
 			if !nmoduli.is_power_of_two() {
 				continue;
 			}
-			let ctx = Arc::new(Context::new(&MODULI[..nmoduli], *degree).unwrap());
+			let ctx = Arc::new(
+				Context::new(&MODULI[..nmoduli], *degree, &mut HashMap::default()).unwrap(),
+			);
 			let mut p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let mut q = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			q.change_representation(Representation::NttShoup);

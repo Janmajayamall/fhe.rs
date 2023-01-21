@@ -105,10 +105,6 @@ impl FheEncoder<&[u64]> for PlaintextVec {
 								v[par.matrix_reps_index_map[i]] = slice[i];
 							}
 
-							#[cfg(feature = "simd")]
-							par.op.as_ref().unwrap().backward_simd(&mut v);
-
-							#[cfg(not(feature = "simd"))]
 							par.op.as_ref().unwrap().backward(&mut v);
 						}
 					};

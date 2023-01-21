@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use fhe_math::{
 	rns::ScalingFactor,
 	rq::{scaler::Scaler, Context, Representation},
@@ -7,6 +5,7 @@ use fhe_math::{
 };
 use fhe_util::div_ceil;
 use num_bigint::BigUint;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
 	bfv::{keys::RelinearizationKey, BfvParameters, Ciphertext},
@@ -82,7 +81,11 @@ impl Multiplicator {
 		par: &Arc<BfvParameters>,
 	) -> Result<Self> {
 		let base_ctx = par.ctx_at_level(level)?;
-		let mul_ctx = Arc::new(Context::new(extended_basis, par.degree())?);
+		let mul_ctx = Arc::new(Context::new(
+			extended_basis,
+			par.degree(),
+			&mut HashMap::default(),
+		)?);
 		let extender_lhs = Scaler::new(base_ctx, &mul_ctx, lhs_scaling_factor)?;
 		let extender_rhs = Scaler::new(base_ctx, &mul_ctx, rhs_scaling_factor)?;
 		let down_scaler = Scaler::new(&mul_ctx, base_ctx, post_mul_scaling_factor)?;
@@ -264,7 +267,7 @@ mod tests {
 			// computed correctly.
 			let values = par.plaintext.random_vec(par.degree(), &mut rng);
 			let mut expected = values.clone();
-			par.plaintext.mul_vec(&mut expected, &values);
+			par.plaintext.mul_vec(&mut expected, &values, par.degree());
 
 			let sk = SecretKey::random(&par, &mut OsRng);
 			let rk = RelinearizationKey::new(&sk, &mut rng)?;
@@ -296,7 +299,7 @@ mod tests {
 			for level in 0..2 {
 				let values = par.plaintext.random_vec(par.degree(), &mut rng);
 				let mut expected = values.clone();
-				par.plaintext.mul_vec(&mut expected, &values);
+				par.plaintext.mul_vec(&mut expected, &values, par.degree());
 
 				let sk = SecretKey::random(&par, &mut OsRng);
 				let rk = RelinearizationKey::new_leveled(&sk, level, level, &mut rng)?;
@@ -332,7 +335,7 @@ mod tests {
 			// computed correctly.
 			let values = par.plaintext.random_vec(par.degree(), &mut rng);
 			let mut expected = values.clone();
-			par.plaintext.mul_vec(&mut expected, &values);
+			par.plaintext.mul_vec(&mut expected, &values, par.degree());
 
 			let sk = SecretKey::random(&par, &mut OsRng);
 			let rk = RelinearizationKey::new(&sk, &mut rng)?;
@@ -378,7 +381,7 @@ mod tests {
 			// computed correctly.
 			let values = par.plaintext.random_vec(par.degree(), &mut rng);
 			let mut expected = values.clone();
-			par.plaintext.mul_vec(&mut expected, &values);
+			par.plaintext.mul_vec(&mut expected, &values, par.degree());
 
 			let sk = SecretKey::random(&par, &mut OsRng);
 			let pt = Plaintext::try_encode(&values, Encoding::simd(), &par)?;

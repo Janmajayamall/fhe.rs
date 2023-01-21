@@ -26,7 +26,7 @@ impl DeserializeWithContext for Poly {
 
 #[cfg(test)]
 mod tests {
-	use std::{error::Error, sync::Arc};
+	use std::{collections::HashMap, error::Error, sync::Arc};
 
 	use fhe_traits::{DeserializeWithContext, Serialize};
 	use rand::thread_rng;
@@ -44,7 +44,7 @@ mod tests {
 		let mut rng = thread_rng();
 
 		for qi in Q {
-			let ctx = Arc::new(Context::new(&[*qi], 8)?);
+			let ctx = Arc::new(Context::new(&[*qi], 8, &mut HashMap::default())?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			assert_eq!(p, Poly::from_bytes(&p.to_bytes(), &ctx)?);
 			let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
@@ -53,7 +53,7 @@ mod tests {
 			assert_eq!(p, Poly::from_bytes(&p.to_bytes(), &ctx)?);
 		}
 
-		let ctx = Arc::new(Context::new(Q, 8)?);
+		let ctx = Arc::new(Context::new(Q, 8, &mut HashMap::default())?);
 		let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 		assert_eq!(p, Poly::from_bytes(&p.to_bytes(), &ctx)?);
 		let p = Poly::random(&ctx, Representation::Ntt, &mut rng);

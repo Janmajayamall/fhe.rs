@@ -307,7 +307,7 @@ impl Modulus {
 	///
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
-	// #[cfg(not(target_arch = "x86_64"))]
+	#[cfg(not(target_arch = "x86_64"))]
 	pub fn sub_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		debug_assert_eq!(a.len(), b.len());
 
@@ -321,7 +321,7 @@ impl Modulus {
 	/// # Safety
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being subtracted.
-	// #[cfg(not(target_arch = "x86_64"))]
+	#[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn sub_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
 		let n = a.len();
 		debug_assert_eq!(n, b.len());
@@ -898,13 +898,13 @@ impl Modulus {
 		self.add_vec(a, b, n);
 	}
 
-	// pub fn sub_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
-	// 	hexl_rs::elwise_sub_mod(a, b, self.p, n as u64);
-	// }
+	pub fn sub_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
+		hexl_rs::elwise_sub_mod(a, b, self.p, n as u64);
+	}
 
-	// pub fn sub_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
-	// 	self.sub_vec(a, b, n);
-	// }
+	pub fn sub_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
+		self.sub_vec(a, b, n);
+	}
 
 	pub fn neg_vec(&self, a: &mut [u64], n: usize) {
 		lane_unroll!(self, neg_simd, n, a,);

@@ -10,7 +10,7 @@ use super::Modulus;
 use fhe_util::is_prime;
 #[cfg(target_arch = "x86_64")]
 use hexl_rs::Ntt;
-use itertools::izip;
+
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -38,6 +38,7 @@ pub struct NttOperator {
 	size_inv: u64,
 	size_inv_shoup: u64,
 
+	#[cfg(target_arch = "x86_64")]
 	ntt_hexl: hexl_rs::Ntt,
 }
 
@@ -221,7 +222,9 @@ impl NttOperator {
 	/// This function is not constant time and its timing may reveal information
 	/// about the value being reduced.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn forward_vt_lazy(&self, a_ptr: *mut u64) {
+	pub unsafe fn forward_vt_lazy(&self, a: &mut [u64]) {
+		let a_ptr = a.as_mut_ptr();
+
 		let mut l = self.size >> 1;
 		let mut m = 1;
 		let mut k = 1;
@@ -265,8 +268,9 @@ impl NttOperator {
 	/// This function is not constant time and its timing may reveal information
 	/// about the value being reduced.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn forward_vt(&self, a_ptr: *mut u64) {
-		self.forward_vt_lazy_native(a_ptr);
+	pub unsafe fn forward_vt(&self, a: &mut [u64]) {
+		self.forward_vt_lazy(a);
+		let a_ptr = a.as_mut_ptr();
 		for i in 0..self.size {
 			*a_ptr.add(i) = self.reduce3_vt(*a_ptr.add(i))
 		}
@@ -279,7 +283,9 @@ impl NttOperator {
 	/// This function is not constant time and its timing may reveal information
 	/// about the value being reduced.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn backward_vt(&self, a_ptr: *mut u64) {
+	pub unsafe fn backward_vt(&self, a: &mut [u64]) {
+		let a_ptr = a.as_mut_ptr();
+
 		let mut k = 0;
 		let mut m = self.size >> 1;
 		let mut l = 1;
@@ -464,7 +470,6 @@ impl NttOperator {
 
 #[cfg(test)]
 mod tests {
-	use hexl_rs::Ntt;
 	use rand::thread_rng;
 
 	use super::{supports_ntt, NttOperator};

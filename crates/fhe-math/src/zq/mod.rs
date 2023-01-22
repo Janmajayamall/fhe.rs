@@ -253,7 +253,7 @@ impl Modulus {
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub fn add_vec(&self, a: &mut [u64], b: &[u64]) {
+	pub fn add_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		debug_assert_eq!(a.len(), b.len());
 
 		izip!(a.iter_mut(), b.iter()).for_each(|(ai, bi)| *ai = self.add(*ai, *bi));
@@ -267,7 +267,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being added.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn add_vec_vt(&self, a: &mut [u64], b: &[u64]) {
+	pub unsafe fn add_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
 		let n = a.len();
 		debug_assert_eq!(n, b.len());
 
@@ -363,7 +363,7 @@ impl Modulus {
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub fn mul_vec(&self, a: &mut [u64], b: &[u64]) {
+	pub fn mul_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		debug_assert_eq!(a.len(), b.len());
 
 		if self.supports_opt {
@@ -377,7 +377,7 @@ impl Modulus {
 	///
 	/// Aborts if any of the values in a is >= p in debug mode.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub fn scalar_mul_vec(&self, a: &mut [u64], b: u64) {
+	pub fn scalar_mul_vec(&self, a: &mut [u64], b: u64, n: usize) {
 		let b_shoup = self.shoup(b);
 		a.iter_mut()
 			.for_each(|ai| *ai = self.mul_shoup(*ai, b, b_shoup));
@@ -390,7 +390,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being multiplied.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn scalar_mul_vec_vt(&self, a: &mut [u64], b: u64) {
+	pub unsafe fn scalar_mul_vec_vt(&self, a: &mut [u64], b: u64, n: usize) {
 		let b_shoup = self.shoup(b);
 		a.iter_mut()
 			.for_each(|ai| *ai = self.mul_shoup_vt(*ai, b, b_shoup));
@@ -404,7 +404,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being subtracted.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn mul_vec_vt(&self, a: &mut [u64], b: &[u64]) {
+	pub unsafe fn mul_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
 		debug_assert_eq!(a.len(), b.len());
 
 		if self.supports_opt {
@@ -427,7 +427,7 @@ impl Modulus {
 	/// Aborts if a and b differ in size, and if any of their values is >= p in
 	/// debug mode.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub fn mul_shoup_vec(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64]) {
+	pub fn mul_shoup_vec(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		debug_assert_eq!(a.len(), b.len());
 		debug_assert_eq!(a.len(), b_shoup.len());
 		debug_assert_eq!(&b_shoup, &self.shoup_vec(b));
@@ -444,7 +444,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being multiplied.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn mul_shoup_vec_vt(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64]) {
+	pub unsafe fn mul_shoup_vec_vt(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		debug_assert_eq!(a.len(), b.len());
 		debug_assert_eq!(a.len(), b_shoup.len());
 		debug_assert_eq!(&b_shoup, &self.shoup_vec(b));
@@ -455,7 +455,7 @@ impl Modulus {
 
 	/// Reduce a vector in place in constant time.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub fn reduce_vec(&self, a: &mut [u64]) {
+	pub fn reduce_vec(&self, a: &mut [u64], n: usize) {
 		a.iter_mut().for_each(|ai| *ai = self.reduce(*ai));
 	}
 
@@ -491,7 +491,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being reduced.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn reduce_vec_vt(&self, a: &mut [u64]) {
+	pub unsafe fn reduce_vec_vt(&self, a: &mut [u64], n: usize) {
 		a.iter_mut().for_each(|ai| *ai = self.reduce_vt(*ai));
 	}
 
@@ -527,7 +527,7 @@ impl Modulus {
 
 	/// Reduce a vector in constant time.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub fn reduce_vec_new(&self, a: &[u64]) -> Vec<u64> {
+	pub fn reduce_vec_new(&self, a: &[u64], n: usize) -> Vec<u64> {
 		a.iter().map(|ai| self.reduce(*ai)).collect_vec()
 	}
 
@@ -537,7 +537,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being reduced.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn reduce_vec_new_vt(&self, a: &[u64]) -> Vec<u64> {
+	pub unsafe fn reduce_vec_new_vt(&self, a: &[u64], n: usize) -> Vec<u64> {
 		a.iter().map(|bi| self.reduce_vt(*bi)).collect_vec()
 	}
 
@@ -556,7 +556,7 @@ impl Modulus {
 	/// This function is not constant time and its timing may reveal information
 	/// about the values being negated.
 	#[cfg(not(target_arch = "x86_64"))]
-	pub unsafe fn neg_vec_vt(&self, a: &mut [u64]) {
+	pub unsafe fn neg_vec_vt(&self, a: &mut [u64], n: usize) {
 		izip!(a.iter_mut()).for_each(|ai| *ai = self.neg_vt(*ai));
 	}
 
@@ -793,6 +793,7 @@ impl Modulus {
 		transcode_from_bytes(b, p_nbits)
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn lazy_reduce_opt_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
@@ -803,6 +804,7 @@ impl Modulus {
 		a - (q * Simd::splat(self.p))
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn reduce_opt_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
@@ -813,6 +815,7 @@ impl Modulus {
 		r.simd_min(r - Simd::splat(self.p))
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn mulhi_simd<const LANES: usize>(
 		&self,
@@ -852,6 +855,7 @@ impl Modulus {
 		c_hi
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn neg_simd<const LANES: usize>(&self, a: Simd<u64, LANES>) -> Simd<u64, LANES>
 	where
@@ -862,6 +866,7 @@ impl Modulus {
 		n.simd_min(n - p)
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn lazy_mul_shoup_simd<const LANES: usize>(
 		&self,
@@ -876,6 +881,7 @@ impl Modulus {
 		(a * b) - (q * Simd::splat(self.p))
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn mul_shoup_simd<const LANES: usize>(
 		&self,
@@ -890,46 +896,57 @@ impl Modulus {
 		r.simd_min(r - Simd::splat(self.p))
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn add_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		hexl_rs::elwise_add_mod(a, b, self.p, n as u64);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn add_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
 		self.add_vec(a, b, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn sub_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		hexl_rs::elwise_sub_mod(a, b, self.p, n as u64);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn sub_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
 		self.sub_vec(a, b, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn neg_vec(&self, a: &mut [u64], n: usize) {
 		lane_unroll!(self, neg_simd, n, a,);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn neg_vec_vt(&self, a: &mut [u64], n: usize) {
 		self.neg_vec(a, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn mul_vec(&self, a: &mut [u64], b: &[u64], n: usize) {
 		hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 1);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn mul_vec_vt(&self, a: &mut [u64], b: &[u64], n: usize) {
 		self.mul_vec(a, b, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn scalar_mul_vec(&self, a: &mut [u64], b: u64, n: usize) {
 		hexl_rs::elwise_mult_scalar_mod(a, b, self.p, n as u64, 1);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn scalar_mul_vec_vt(&self, a: &mut [u64], b: u64, n: usize) {
 		self.scalar_mul_vec(a, b, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn mul_shoup_vec(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		if self.nbits > 52 {
 			lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
@@ -938,10 +955,12 @@ impl Modulus {
 		}
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn mul_shoup_vec_vt(&self, a: &mut [u64], b: &[u64], b_shoup: &[u64], n: usize) {
 		self.mul_shoup_vec(a, b, b_shoup, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn reduce_vec(&self, a: &mut [u64], n: usize) {
 		if self.nbits > 52 && self.supports_opt {
 			lane_unroll!(self, reduce_opt_simd, n, a,);
@@ -950,10 +969,12 @@ impl Modulus {
 		}
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn reduce_vec_vt(&self, a: &mut [u64], n: usize) {
 		self.reduce_vec(a, n);
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn reduce_vec_new(&self, a: &[u64], n: usize) -> Vec<u64> {
 		let mut a = a.to_vec();
 
@@ -966,10 +987,12 @@ impl Modulus {
 		a
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn reduce_vec_new_vt(&self, a: &[u64], n: usize) -> Vec<u64> {
 		self.reduce_vec_new(a, n)
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	pub fn lazy_reduce_vec(&self, a: &mut [u64], n: usize) {
 		if self.nbits > 52 && self.supports_opt {
 			lane_unroll!(self, lazy_reduce_opt_simd, n, a,);

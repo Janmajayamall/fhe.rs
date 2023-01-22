@@ -29,7 +29,7 @@ zeroize.workspace = true
 sha2.workspace = true
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-hexl-rs = {path = "./../../../hexl-rs"}
+hexl-rs = {git = "https://github.com/Janmajayamall/hexl-rs.git", branch = "main"}
 
 [dev-dependencies]
 criterion.workspace = true

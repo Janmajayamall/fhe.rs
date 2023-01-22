@@ -24,7 +24,7 @@ impl Add<&Ciphertext> for &Ciphertext {
 
 impl AddAssign<&Ciphertext> for Ciphertext {
 	fn add_assign(&mut self, rhs: &Ciphertext) {
-		assert_eq!(self.par, rhs.par);
+		debug_assert_eq!(self.par, rhs.par);
 
 		if self.c.is_empty() {
 			*self = rhs.clone()
@@ -57,7 +57,7 @@ impl Add<&Ciphertext> for &Plaintext {
 
 impl AddAssign<&Plaintext> for Ciphertext {
 	fn add_assign(&mut self, rhs: &Plaintext) {
-		assert_eq!(self.par, rhs.par);
+		debug_assert_eq!(self.par, rhs.par);
 		assert!(!self.c.is_empty());
 		assert_eq!(self.level, rhs.level);
 
@@ -79,7 +79,7 @@ impl Sub<&Ciphertext> for &Ciphertext {
 
 impl SubAssign<&Ciphertext> for Ciphertext {
 	fn sub_assign(&mut self, rhs: &Ciphertext) {
-		assert_eq!(self.par, rhs.par);
+		debug_assert_eq!(self.par, rhs.par);
 
 		if self.c.is_empty() {
 			*self = -rhs
@@ -112,7 +112,7 @@ impl Sub<&Ciphertext> for &Plaintext {
 
 impl SubAssign<&Plaintext> for Ciphertext {
 	fn sub_assign(&mut self, rhs: &Plaintext) {
-		assert_eq!(self.par, rhs.par);
+		debug_assert_eq!(self.par, rhs.par);
 		assert!(!self.c.is_empty());
 		assert_eq!(self.level, rhs.level);
 
@@ -148,7 +148,7 @@ impl Neg for Ciphertext {
 
 impl MulAssign<&Plaintext> for Ciphertext {
 	fn mul_assign(&mut self, rhs: &Plaintext) {
-		assert_eq!(self.par, rhs.par);
+		debug_assert_eq!(self.par, rhs.par);
 		if !self.c.is_empty() {
 			assert_eq!(self.level, rhs.level);
 			self.c.iter_mut().for_each(|ci| *ci *= &rhs.poly_ntt);
@@ -220,7 +220,7 @@ impl Mul<&Ciphertext> for &Ciphertext {
 				level: rhs.level,
 			}
 		} else {
-			assert_eq!(self.par, rhs.par);
+			debug_assert_eq!(self.par, rhs.par);
 			assert_eq!(self.level, rhs.level);
 
 			let mp = &self.par.mul_params[self.level];

@@ -35,9 +35,6 @@ hexl-rs = {git = "https://github.com/Janmajayamall/hexl-rs.git", branch = "main"
 criterion.workspace = true
 proptest.workspace = true
 
-[features]
-simd = []
-
 [[bench]]
 name = "zq"
 harness = false

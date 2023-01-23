@@ -20,7 +20,7 @@ macro_rules! lane_unroll {
 		macro_rules! tmp {
 			($lane:literal) => {
 				let (a0, a1) = $a.as_chunks_mut();
-				debug_assert(a1.len() == 0);
+				debug_assert!(a1.len() == 0);
 				$(
 					let ($b0, _) = $b.as_chunks();
 				)*

@@ -952,7 +952,7 @@ impl Modulus {
 		if self.nbits > 52 {
 			lane_unroll!(self, mul_shoup_simd, n, a, b, b0, bi, b_shoup, c0, ci);
 		} else {
-			hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 1);
+			hexl_rs::elwise_mult_mod(a, b, self.p, n as u64, 4);
 		}
 	}
 

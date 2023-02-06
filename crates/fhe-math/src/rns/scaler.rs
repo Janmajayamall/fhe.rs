@@ -254,16 +254,61 @@ impl RnsScaler {
 		) {
 			let lo = (*ri as u128) * (*thetag_lo as u128);
 			let hi = (*ri as u128) * (*thetag_hi as u128) + (lo >> 64);
-			sum_theta_garner = sum_theta_garner.wrapping_add(&U192::from_words([
-				lo as u64,
-				hi as u64,
-				(hi >> 64) as u64,
-			]));
+			// sum_theta_garner = sum_theta_garner.wrapping_add(&U192::from_words([
+			// 	lo as u64,
+			// 	hi as u64,
+			// 	(hi >> 64) as u64,
+			// ]));
+
+			#[cfg(target_arch = "wasm32")]
+			{
+				let hi_hi = hi >> 64;
+				let hi = hi as u64;
+				let lo = lo as u64;
+
+				let lo_lo = lo as u32;
+				let lo_hi = (lo >> 32) as u32;
+				let _hi_lo = hi as u32;
+				let _hi_hi = (hi >> 32) as u32;
+				let hi_hi_lo = hi_hi as u32;
+				let hi_hi_hi = (hi_hi >> 32) as u32;
+
+				sum_theta_garner = sum_theta_garner.wrapping_add(&U192::from_words([
+					lo_lo, lo_hi, _hi_lo, _hi_hi, hi_hi_lo, hi_hi_hi,
+				]));
+			}
+
+			#[cfg(not(target_arch = "wasm32"))]
+			{
+				sum_theta_garner = sum_theta_garner.wrapping_add(&U192::from_words([
+					lo as u64,
+					hi as u64,
+					(hi >> 64) as u64,
+				]));
+			}
 		}
 		// Let's compute v = round(sum_theta_garner / 2^theta_garner_shift)
 		sum_theta_garner >>= self.theta_garner_shift - 1;
-		let v = <[u64; 3]>::from(sum_theta_garner);
-		let v = div_ceil((v[0] as u128) | ((v[1] as u128) << 64), 2);
+		// let v = <[u64; 3]>::from(sum_theta_garner);
+		// let v = div_ceil((v[0] as u128) | ((v[1] as u128) << 64), 2);
+
+		#[cfg(target_arch = "wasm32")]
+		let v = {
+			let v = <[u32; 6]>::from(sum_theta_garner);
+			div_ceil(
+				(v[0] as u128)
+					| ((v[1] as u128) << 32)
+					| ((v[2] as u128) << 64)
+					| ((v[3] as u128) << 96),
+				2,
+			)
+		};
+
+		#[cfg(not(target_arch = "wasm32"))]
+		let v = {
+			let v = <[u64; 3]>::from(sum_theta_garner);
+			div_ceil((v[0] as u128) | ((v[1] as u128) << 64), 2)
+		};
 
 		// If the scaling factor is not 1, compute the inner product with the
 		// theta_omega

@@ -38,7 +38,7 @@ impl SecretKey {
 	}
 
 	/// Generate a [`SecretKey`] from its coefficients.
-	pub(crate) fn new(coeffs: Vec<i64>, par: &Arc<BfvParameters>) -> Self {
+	pub fn new(coeffs: Vec<i64>, par: &Arc<BfvParameters>) -> Self {
 		Self {
 			par: par.clone(),
 			coeffs: coeffs.into_boxed_slice(),
@@ -195,8 +195,8 @@ impl FheDecrypter<Plaintext, Ciphertext> for SecretKey {
 			);
 			let mut w = v[..self.par.degree()].to_vec();
 			let q = Modulus::new(self.par.moduli[0]).map_err(Error::MathError)?;
-			q.reduce_vec(&mut w,self.par.degree());
-			self.par.plaintext.reduce_vec(&mut w,self.par.degree());
+			q.reduce_vec(&mut w, self.par.degree());
+			self.par.plaintext.reduce_vec(&mut w, self.par.degree());
 
 			let mut poly =
 				Poly::try_convert_from(&w, ct.c[0].ctx(), false, Representation::PowerBasis)?;

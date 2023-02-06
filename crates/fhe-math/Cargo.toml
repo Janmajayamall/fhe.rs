@@ -31,6 +31,9 @@ sha2.workspace = true
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 hexl-rs = {git = "https://github.com/Janmajayamall/hexl-rs.git", branch = "main"}
 
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = {version = "0.2.7", features=["js"]}
+
 [dev-dependencies]
 criterion.workspace = true
 proptest.workspace = true

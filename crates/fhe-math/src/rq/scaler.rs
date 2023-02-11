@@ -138,6 +138,7 @@ impl Scaler {
 mod tests {
 	use super::{Scaler, ScalingFactor};
 	use crate::rq::{Context, Poly, Representation};
+	use core::time;
 	use itertools::Itertools;
 	use num_bigint::BigUint;
 	use num_traits::{One, Zero};
@@ -208,5 +209,52 @@ mod tests {
 		}
 
 		Ok(())
+	}
+
+	static NQ: &[u64; 5] = &[
+		4611686018427387761,
+		4611686018427387617,
+		4611686018427387409,
+		4611686018427387329,
+		4611686018427387073,
+	];
+
+	static NP: &[u64; 5] = &[
+		4611686018427386897,
+		4611686018427386081,
+		4611686018427385553,
+		4611686018427385537,
+		4611686018427385393,
+	];
+
+	#[test]
+	fn cmp_fast_conv_p_over_q() {
+		let from = Arc::new(Context::new(NQ, 8).unwrap());
+		let to = Arc::new(Context::new(NP, 8).unwrap());
+
+		let scaler =
+			Scaler::new(&from, &to, ScalingFactor::new(to.modulus(), from.modulus())).unwrap();
+
+		let mut rng = thread_rng();
+		let mut poly_q = Poly::random(&from, Representation::PowerBasis, &mut rng);
+
+		let now = std::time::Instant::now();
+		scaler.scale(&poly_q);
+		println!("time: {:?}", now.elapsed());
+	}
+
+	#[test]
+	fn cmp_switch_crt_basis() {
+		let from = Arc::new(Context::new(NQ, 8).unwrap());
+		let to = Arc::new(Context::new(NP, 8).unwrap());
+
+		let scaler = Scaler::new(&from, &to, ScalingFactor::one()).unwrap();
+
+		let mut rng = thread_rng();
+		let mut poly_q = Poly::random(&from, Representation::PowerBasis, &mut rng);
+
+		let now = std::time::Instant::now();
+		scaler.scale(&poly_q);
+		println!("time: {:?}", now.elapsed());
 	}
 }

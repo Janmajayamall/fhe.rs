@@ -19,7 +19,7 @@ pub struct Context {
 	pub(crate) bitrev: Box<[usize]>,
 	pub(crate) inv_last_qi_mod_qj: Box<[u64]>,
 	pub(crate) inv_last_qi_mod_qj_shoup: Box<[u64]>,
-	pub(crate) next_context: Option<Arc<Context>>,
+	pub next_context: Option<Arc<Context>>,
 }
 
 impl Debug for Context {
@@ -84,15 +84,15 @@ impl Context {
 				inv_last_qi_mod_qj_shoup.push(qi.shoup(inv));
 			}
 
-			// let next_context = if moduli.len() >= 2 {
-			// 	Some(Arc::new(Context::new(
-			// 		&moduli[..moduli.len() - 1],
-			// 		degree,
-			// 		ntt_ops,
-			// 	)?))
-			// } else {
-			// 	None
-			// };
+			let next_context = if moduli.len() >= 2 {
+				Some(Arc::new(Context::new(
+					&moduli[..moduli.len() - 1],
+					degree,
+					ntt_ops,
+				)?))
+			} else {
+				None
+			};
 
 			Ok(Self {
 				moduli: moduli.to_owned().into_boxed_slice(),
@@ -103,7 +103,7 @@ impl Context {
 				bitrev: bitrev.into_boxed_slice(),
 				inv_last_qi_mod_qj: inv_last_qi_mod_qj.into_boxed_slice(),
 				inv_last_qi_mod_qj_shoup: inv_last_qi_mod_qj_shoup.into_boxed_slice(),
-				next_context: None,
+				next_context: next_context,
 			})
 		}
 	}

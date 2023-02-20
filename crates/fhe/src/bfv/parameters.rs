@@ -377,16 +377,12 @@ impl BfvParametersBuilder {
 		let mut q_mod_t = Vec::with_capacity(moduli.len());
 		let mut scalers = Vec::with_capacity(moduli.len());
 		let mut mul_params = Vec::with_capacity(moduli.len());
+
+		let mut main_ctx =
+			Arc::new(Context::new(&moduli[..], self.degree, &mut HashMap::default()).unwrap());
 		for i in 0..moduli.len() {
 			let rns = RnsContext::new(&moduli[..moduli.len() - i]).unwrap();
-			let ctx_i = Arc::new(
-				Context::new(
-					&moduli[..moduli.len() - i],
-					self.degree,
-					&mut HashMap::default(),
-				)
-				.unwrap(),
-			);
+			let ctx_i = main_ctx.clone();
 			let mut p = Poly::try_convert_from(
 				&[rns.lift((&delta_rests).into())],
 				&ctx_i,
@@ -428,6 +424,10 @@ impl BfvParametersBuilder {
 			)?);
 
 			ctx.push(ctx_i);
+
+			if i != moduli.len() - 1 {
+				main_ctx = main_ctx.next_context.clone().unwrap();
+			}
 		}
 
 		// We use the same code as SEAL

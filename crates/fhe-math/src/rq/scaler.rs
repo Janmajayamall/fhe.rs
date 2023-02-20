@@ -165,8 +165,8 @@ mod tests {
 	fn scaler() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		let ntests = 100;
-		let from = Arc::new(Context::new(Q, 8, &mut HashMap::default())?);
-		let to = Arc::new(Context::new(P, 8, &mut HashMap::default())?);
+		let from = Arc::new(Context::new(Q, 8, &mut HashMap::default(), true)?);
+		let to = Arc::new(Context::new(P, 8, &mut HashMap::default(), true)?);
 
 		for numerator in &[1u64, 2, 3, 100, 1000, 4611686018326724610] {
 			for denominator in &[1u64, 2, 3, 4, 100, 101, 1000, 1001, 4611686018326724610] {

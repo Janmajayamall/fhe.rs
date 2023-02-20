@@ -19,7 +19,7 @@ pub struct Context {
 	pub(crate) bitrev: Box<[usize]>,
 	pub(crate) inv_last_qi_mod_qj: Box<[u64]>,
 	pub(crate) inv_last_qi_mod_qj_shoup: Box<[u64]>,
-	pub(crate) next_context: Option<Arc<Context>>,
+	pub next_context: Option<Arc<Context>>,
 }
 
 impl Debug for Context {
@@ -47,6 +47,7 @@ impl Context {
 		moduli: &[u64],
 		degree: usize,
 		ntt_ops: &mut HashMap<(u64, usize), NttOperator>,
+		comp_next_ctx: bool,
 	) -> Result<Self> {
 		if !degree.is_power_of_two() || degree < 8 {
 			Err(Error::Default(
@@ -85,11 +86,16 @@ impl Context {
 			}
 
 			let next_context = if moduli.len() >= 2 {
-				Some(Arc::new(Context::new(
-					&moduli[..moduli.len() - 1],
-					degree,
-					ntt_ops,
-				)?))
+				if comp_next_ctx {
+					Some(Arc::new(Context::new(
+						&moduli[..moduli.len() - 1],
+						degree,
+						ntt_ops,
+						comp_next_ctx,
+					)?))
+				} else {
+					None
+				}
 			} else {
 				None
 			};
@@ -182,32 +188,33 @@ mod tests {
 	fn context_constructor() {
 		for modulus in MODULI {
 			// modulus is = 1 modulo 2 * 8
-			assert!(Context::new(&[*modulus], 8, &mut HashMap::default()).is_ok());
+			assert!(Context::new(&[*modulus], 8, &mut HashMap::default(), true).is_ok());
 
 			if supports_ntt(*modulus, 128) {
-				assert!(Context::new(&[*modulus], 128, &mut HashMap::default()).is_ok());
+				assert!(Context::new(&[*modulus], 128, &mut HashMap::default(), true).is_ok());
 			} else {
-				assert!(Context::new(&[*modulus], 128, &mut HashMap::default()).is_err());
+				assert!(Context::new(&[*modulus], 128, &mut HashMap::default(), true).is_err());
 			}
 		}
 
 		// All moduli in MODULI are = 1 modulo 2 * 8
-		assert!(Context::new(MODULI, 8, &mut HashMap::default()).is_ok());
+		assert!(Context::new(MODULI, 8, &mut HashMap::default(), true).is_ok());
 
 		// This should fail since 1153 != 1 moduli 2 * 128
-		assert!(Context::new(MODULI, 128, &mut HashMap::default()).is_err());
+		assert!(Context::new(MODULI, 128, &mut HashMap::default(), true).is_err());
 	}
 
 	#[test]
 	fn next_context() -> Result<(), Box<dyn Error>> {
 		// A context should have a children pointing to a context with one less modulus.
-		let context = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let context = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		assert_eq!(
 			context.next_context,
 			Some(Arc::new(Context::new(
 				&MODULI[..MODULI.len() - 1],
 				8,
-				&mut HashMap::default()
+				&mut HashMap::default(),
+				true
 			)?))
 		);
 
@@ -226,7 +233,7 @@ mod tests {
 	#[test]
 	fn niterations_to() -> Result<(), Box<dyn Error>> {
 		// A context should have a children pointing to a context with one less modulus.
-		let context = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let context = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 
 		assert_eq!(context.niterations_to(&context).ok(), Some(0));
 
@@ -235,7 +242,8 @@ mod tests {
 				.niterations_to(&Arc::new(Context::new(
 					&MODULI[1..],
 					8,
-					&mut HashMap::default()
+					&mut HashMap::default(),
+					true
 				)?))
 				.err(),
 			Some(crate::Error::InvalidContext)
@@ -247,7 +255,8 @@ mod tests {
 					.niterations_to(&Arc::new(Context::new(
 						&MODULI[..MODULI.len() - i],
 						8,
-						&mut HashMap::default()
+						&mut HashMap::default(),
+						true
 					)?))
 					.ok(),
 				Some(i)
@@ -259,6 +268,6 @@ mod tests {
 
 	#[test]
 	fn create_ctx() {
-		let ctx = Context::new(MODULI, 8, &mut HashMap::default()).unwrap();
+		let ctx = Context::new(MODULI, 8, &mut HashMap::default(), true).unwrap();
 	}
 }

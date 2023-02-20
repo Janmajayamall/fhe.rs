@@ -130,8 +130,9 @@ pub fn rq_dot_product(c: &mut Criterion) {
 	let mut rng = thread_rng();
 	for degree in DEGREE {
 		for i in [1, 4] {
-			let ctx =
-				Arc::new(Context::new(&MODULI[..i], *degree, &mut HashMap::default()).unwrap());
+			let ctx = Arc::new(
+				Context::new(&MODULI[..i], *degree, &mut HashMap::default(), true).unwrap(),
+			);
 			let p_vec = (0..256)
 				.map(|_| Poly::random(&ctx, Representation::Ntt, &mut rng))
 				.collect_vec();

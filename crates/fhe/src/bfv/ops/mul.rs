@@ -85,6 +85,7 @@ impl Multiplicator {
 			extended_basis,
 			par.degree(),
 			&mut HashMap::default(),
+			true,
 		)?);
 		let extender_lhs = Scaler::new(base_ctx, &mul_ctx, lhs_scaling_factor)?;
 		let extender_rhs = Scaler::new(base_ctx, &mul_ctx, rhs_scaling_factor)?;

@@ -313,6 +313,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 			&params.moduli()[..1],
 			params.degree(),
 			&mut HashMap::default(),
+			true,
 		)?);
 		let ct = bfv::Ciphertext::new(
 			vec![

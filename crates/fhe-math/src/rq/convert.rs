@@ -425,7 +425,7 @@ mod tests {
 	fn proto() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let proto = Rq::from(&p);
 			assert_eq!(Poly::try_convert_from(&proto, &ctx, false, None)?, p);
@@ -445,7 +445,7 @@ mod tests {
 			);
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 		let proto = Rq::from(&p);
 		assert_eq!(Poly::try_convert_from(&proto, &ctx, false, None)?, p);
@@ -464,7 +464,12 @@ mod tests {
 				CrateError::Default("The representation asked for does not match the representation in the serialization".to_string())
 		);
 
-		let ctx = Arc::new(Context::new(&MODULI[0..1], 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(
+			&MODULI[0..1],
+			8,
+			&mut HashMap::default(),
+			true,
+		)?);
 		assert_eq!(
 			Poly::try_convert_from(&proto, &ctx, false, None)
 				.expect_err("Should fail because of incorrect context"),
@@ -477,7 +482,7 @@ mod tests {
 	#[test]
 	fn try_convert_from_slice_zero() -> Result<(), Box<dyn Error>> {
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 
 			// Power Basis
 			assert_eq!(
@@ -521,7 +526,7 @@ mod tests {
 			.is_err());
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		assert_eq!(
 			Poly::try_convert_from(
 				Vec::<u64>::default(),
@@ -568,7 +573,7 @@ mod tests {
 	#[test]
 	fn try_convert_from_vec_zero() -> Result<(), Box<dyn Error>> {
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			assert_eq!(
 				Poly::try_convert_from(vec![], &ctx, false, Representation::PowerBasis)?,
 				Poly::zero(&ctx, Representation::PowerBasis)
@@ -597,7 +602,7 @@ mod tests {
 			assert!(Poly::try_convert_from(vec![0; 9], &ctx, false, Representation::Ntt).is_err());
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		assert_eq!(
 			Poly::try_convert_from(vec![], &ctx, false, Representation::PowerBasis)?,
 			Poly::zero(&ctx, Representation::PowerBasis)
@@ -638,7 +643,7 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..100 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 				let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 				let p_coeffs = Vec::<BigUint>::from(&p);
 				let q = Poly::try_convert_from(
@@ -650,7 +655,7 @@ mod tests {
 				assert_eq!(p, q);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let p_coeffs = Vec::<BigUint>::from(&p);
 			assert_eq!(p_coeffs.len(), ctx.degree);

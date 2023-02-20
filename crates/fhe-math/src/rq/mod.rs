@@ -687,7 +687,7 @@ mod tests {
 		];
 
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			let p = Poly::zero(&ctx, Representation::PowerBasis);
 			let q = Poly::zero(&ctx, Representation::Ntt);
 			assert_ne!(p, q);
@@ -695,7 +695,7 @@ mod tests {
 			assert_eq!(Vec::<u64>::from(&q), &[0; 8]);
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		let p = Poly::zero(&ctx, Representation::PowerBasis);
 		let q = Poly::zero(&ctx, Representation::Ntt);
 		assert_ne!(p, q);
@@ -710,12 +710,12 @@ mod tests {
 	#[test]
 	fn ctx() -> Result<(), Box<dyn Error>> {
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			let p = Poly::zero(&ctx, Representation::PowerBasis);
 			assert_eq!(p.ctx(), &ctx);
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		let p = Poly::zero(&ctx, Representation::PowerBasis);
 		assert_eq!(p.ctx(), &ctx);
 
@@ -730,13 +730,13 @@ mod tests {
 			thread_rng().fill(&mut seed);
 
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 				let p = Poly::random_from_seed(&ctx, Representation::Ntt, seed);
 				let q = Poly::random_from_seed(&ctx, Representation::Ntt, seed);
 				assert_eq!(p, q);
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 			let p = Poly::random_from_seed(&ctx, Representation::Ntt, seed);
 			let q = Poly::random_from_seed(&ctx, Representation::Ntt, seed);
 			assert_eq!(p, q);
@@ -757,13 +757,13 @@ mod tests {
 		let mut rng = thread_rng();
 		for _ in 0..50 {
 			for modulus in MODULI {
-				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+				let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 				let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 				let p_coefficients = Vec::<u64>::from(&p);
 				assert_eq!(p_coefficients, p.coefficients().as_slice().unwrap())
 			}
 
-			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 			let p = Poly::random(&ctx, Representation::Ntt, &mut rng);
 			let p_coefficients = Vec::<u64>::from(&p);
 			assert_eq!(p_coefficients, p.coefficients().as_slice().unwrap())
@@ -775,13 +775,13 @@ mod tests {
 	fn modulus() -> Result<(), Box<dyn Error>> {
 		for modulus in MODULI {
 			let modulus_biguint = BigUint::from(*modulus);
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			assert_eq!(ctx.modulus(), &modulus_biguint)
 		}
 
 		let mut modulus_biguint = BigUint::one();
 		MODULI.iter().for_each(|m| modulus_biguint *= *m);
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		assert_eq!(ctx.modulus(), &modulus_biguint);
 
 		Ok(())
@@ -791,7 +791,7 @@ mod tests {
 	fn allow_variable_time_computations() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			let mut p = Poly::random(&ctx, Representation::default(), &mut rng);
 			assert!(!p.allow_variable_time_computations);
 
@@ -805,7 +805,7 @@ mod tests {
 			assert!(!p.allow_variable_time_computations);
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		let mut p = Poly::random(&ctx, Representation::default(), &mut rng);
 		assert!(!p.allow_variable_time_computations);
 
@@ -841,7 +841,7 @@ mod tests {
 	#[test]
 	fn change_representation() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 
 		let mut p = Poly::random(&ctx, Representation::default(), &mut rng);
 		assert_eq!(p.representation, Representation::default());
@@ -885,7 +885,7 @@ mod tests {
 	#[test]
 	fn override_representation() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 
 		let mut p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 		assert_eq!(p.representation(), &p.representation);
@@ -919,7 +919,7 @@ mod tests {
 	fn small() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			let q = Modulus::new(*modulus).unwrap();
 
 			let e = Poly::small(&ctx, Representation::PowerBasis, 0, &mut rng);
@@ -949,6 +949,7 @@ mod tests {
 			&[4611686018326724609],
 			1 << 18,
 			&mut HashMap::default(),
+			true,
 		)?);
 		let q = Modulus::new(4611686018326724609).unwrap();
 		let p = Poly::small(&ctx, Representation::PowerBasis, 8, &mut thread_rng())?;
@@ -964,7 +965,7 @@ mod tests {
 	fn substitute() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		for modulus in MODULI {
-			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default())?);
+			let ctx = Arc::new(Context::new(&[*modulus], 8, &mut HashMap::default(), true)?);
 			let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 			let mut p_ntt = p.clone();
 			p_ntt.change_representation(Representation::Ntt);
@@ -1028,7 +1029,7 @@ mod tests {
 			);
 		}
 
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		let p = Poly::random(&ctx, Representation::PowerBasis, &mut rng);
 		let mut p_ntt = p.clone();
 		p_ntt.change_representation(Representation::Ntt);
@@ -1060,7 +1061,7 @@ mod tests {
 	fn mod_switch_down_next() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		let ntests = 100;
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 
 		for _ in 0..ntests {
 			// If the polynomial has incorrect representation, an error is returned
@@ -1106,8 +1107,13 @@ mod tests {
 	fn mod_switch_down_to() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		let ntests = 100;
-		let ctx1 = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
-		let ctx2 = Arc::new(Context::new(&MODULI[..2], 8, &mut HashMap::default())?);
+		let ctx1 = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
+		let ctx2 = Arc::new(Context::new(
+			&MODULI[..2],
+			8,
+			&mut HashMap::default(),
+			true,
+		)?);
 
 		for _ in 0..ntests {
 			let mut p = Poly::random(&ctx1, Representation::PowerBasis, &mut rng);
@@ -1132,7 +1138,7 @@ mod tests {
 	fn mod_switch_down_time_measure() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		// let ntests = 100;
-		let ctx1 = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx1 = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		// let ctx2 = Arc::new(Context::new(&MODULI[..2], 8)?);
 
 		let mut p = Poly::random(&ctx1, Representation::PowerBasis, &mut rng);
@@ -1151,8 +1157,18 @@ mod tests {
 	fn mod_switch_to() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		let ntests = 100;
-		let ctx1 = Arc::new(Context::new(&MODULI[..2], 8, &mut HashMap::default())?);
-		let ctx2 = Arc::new(Context::new(&MODULI[3..], 8, &mut HashMap::default())?);
+		let ctx1 = Arc::new(Context::new(
+			&MODULI[..2],
+			8,
+			&mut HashMap::default(),
+			true,
+		)?);
+		let ctx2 = Arc::new(Context::new(
+			&MODULI[3..],
+			8,
+			&mut HashMap::default(),
+			true,
+		)?);
 		let switcher = Switcher::new(&ctx1, &ctx2)?;
 		for _ in 0..ntests {
 			let p = Poly::random(&ctx1, Representation::PowerBasis, &mut rng);
@@ -1175,7 +1191,7 @@ mod tests {
 	#[test]
 	fn mul_x_power() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
-		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default())?);
+		let ctx = Arc::new(Context::new(MODULI, 8, &mut HashMap::default(), true)?);
 		let e = Poly::random(&ctx, Representation::Ntt, &mut rng).multiply_inverse_power_of_x(1);
 		assert!(e.is_err());
 		assert_eq!(

@@ -217,10 +217,9 @@ impl DeserializeParametrized for EvaluationKey {
 
 	fn from_bytes(bytes: &[u8], par: &Arc<Self::Parameters>) -> Result<Self> {
 		let gkp = EvaluationKeyProto::parse_from_bytes(bytes);
-		if let Ok(gkp) = gkp {
-			EvaluationKey::try_convert_from(&gkp, par)
-		} else {
-			Err(Error::DefaultError("Invalid serialization".to_string()))
+		match gkp {
+			Ok(val) => EvaluationKey::try_convert_from(&val, par),
+			Err(e) => Err(Error::DefaultError(format!("Invalid serialization: {e:?}"))),
 		}
 	}
 }

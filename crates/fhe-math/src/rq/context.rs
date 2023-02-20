@@ -59,8 +59,8 @@ impl Context {
 			for modulus in moduli {
 				let qi = Modulus::new(*modulus)?;
 				if let Some(op) = ntt_ops.get(&(*modulus, degree)) {
-					ops.push(NttOperator::new(&qi, degree).expect("Ntt Op failed"));
 					q.push(qi);
+					ops.push(op.clone());
 				} else if let Some(op) = NttOperator::new(&qi, degree) {
 					ntt_ops.insert((*modulus, degree), op.clone());
 					q.push(qi);
@@ -84,15 +84,15 @@ impl Context {
 				inv_last_qi_mod_qj_shoup.push(qi.shoup(inv));
 			}
 
-			let next_context = if moduli.len() >= 10 {
-				Some(Arc::new(Context::new(
-					&moduli[..moduli.len() - 1],
-					degree,
-					ntt_ops,
-				)?))
-			} else {
-				None
-			};
+			// let next_context = if moduli.len() >= 2 {
+			// 	Some(Arc::new(Context::new(
+			// 		&moduli[..moduli.len() - 1],
+			// 		degree,
+			// 		ntt_ops,
+			// 	)?))
+			// } else {
+			// 	None
+			// };
 
 			Ok(Self {
 				moduli: moduli.to_owned().into_boxed_slice(),
@@ -103,7 +103,7 @@ impl Context {
 				bitrev: bitrev.into_boxed_slice(),
 				inv_last_qi_mod_qj: inv_last_qi_mod_qj.into_boxed_slice(),
 				inv_last_qi_mod_qj_shoup: inv_last_qi_mod_qj_shoup.into_boxed_slice(),
-				next_context,
+				next_context: None,
 			})
 		}
 	}

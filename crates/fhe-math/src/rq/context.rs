@@ -84,7 +84,7 @@ impl Context {
 				inv_last_qi_mod_qj_shoup.push(qi.shoup(inv));
 			}
 
-			let next_context = if moduli.len() >= 2 {
+			let next_context = if moduli.len() >= 10 {
 				Some(Arc::new(Context::new(
 					&moduli[..moduli.len() - 1],
 					degree,

@@ -59,8 +59,8 @@ impl Context {
 			for modulus in moduli {
 				let qi = Modulus::new(*modulus)?;
 				if let Some(op) = ntt_ops.get(&(*modulus, degree)) {
+					ops.push(NttOperator::new(&qi, degree).expect("Ntt Op failed"));
 					q.push(qi);
-					ops.push(op.clone());
 				} else if let Some(op) = NttOperator::new(&qi, degree) {
 					ntt_ops.insert((*modulus, degree), op.clone());
 					q.push(qi);

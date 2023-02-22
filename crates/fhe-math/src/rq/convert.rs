@@ -16,7 +16,16 @@ impl From<&Poly> for Rq {
 	fn from(p: &Poly) -> Self {
 		assert!(!p.has_lazy_coefficients);
 
+		// Since hexl only supports x86 we default to native ntt implementation on other
+		// archs. This causes ntt.forward to fail bijection with ntt.backward on
+		// another. For ex, Ntt form of a value on mac will result in a different value
+		// on Ntt backward on x86 (due to different omegas used in ntt operators).
+		// Hence, we serialize only in coefficient form.
+		let mut p = p.clone();
+		p.change_representation(Representation::PowerBasis);
+
 		let mut proto = Rq::new();
+
 		match p.representation {
 			Representation::PowerBasis => {
 				proto.representation = EnumOrUnknown::new(rq::Representation::POWERBASIS);
@@ -28,6 +37,7 @@ impl From<&Poly> for Rq {
 				proto.representation = EnumOrUnknown::new(rq::Representation::NTTSHOUP);
 			}
 		}
+
 		let mut serialization_length = 0;
 		p.ctx
 			.q

@@ -102,7 +102,7 @@ impl TryConvertFrom<Vec<u64>> for Poly {
 				}
 			}
 			Some(Representation::PowerBasis) => {
-				if v.len() == ctx.q.len() * ctx.degree {
+				let mut poly_res = if v.len() == ctx.q.len() * ctx.degree {
 					let coefficients =
 						Array2::from_shape_vec((ctx.q.len(), ctx.degree), v).unwrap();
 					Ok(Self {
@@ -139,7 +139,10 @@ impl TryConvertFrom<Vec<u64>> for Poly {
 					Ok(out)
 				} else {
 					Err(Error::Default("In PowerBasis representation, either all coefficients must be specified, or only coefficients up to the degree".to_string()))
-				}
+				}?;
+
+				poly_res.change_representation(Representation::Ntt);
+				Ok(poly_res)
 			}
 			None => Err(Error::Default(
 				"When converting from a vector, the representation needs to be specified"

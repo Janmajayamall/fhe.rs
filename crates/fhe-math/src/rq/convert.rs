@@ -35,8 +35,20 @@ impl From<&Poly> for Rq {
 			.for_each(|qi| serialization_length += qi.serialization_length(p.ctx.degree));
 		let mut serialization = Vec::with_capacity(serialization_length);
 
-		izip!(p.coefficients.outer_iter(), p.ctx.q.iter())
-			.for_each(|(v, qi)| serialization.append(&mut qi.serialize_vec(v.as_slice().unwrap())));
+		izip!(
+			p.coefficients.outer_iter(),
+			p.ctx.q.iter(),
+			p.ctx.ops.iter()
+		)
+		.for_each(|(v, qi, nttop)| {
+			if p.representation != Representation::PowerBasis {
+				let mut coeffs = v.clone().to_vec();
+				nttop.backward(&mut coeffs);
+				serialization.append(&mut qi.serialize_vec(&coeffs));
+			} else {
+				serialization.append(&mut qi.serialize_vec(v.as_slice().unwrap()));
+			}
+		});
 		proto.coefficients = serialization;
 		proto.degree = p.ctx.degree as u32;
 		proto.allow_variable_time = p.allow_variable_time_computations;
@@ -57,7 +69,11 @@ impl TryConvertFrom<Vec<u64>> for Poly {
 		let repr = representation.into();
 		match repr {
 			Some(Representation::Ntt) => {
-				if let Ok(coefficients) = Array2::from_shape_vec((ctx.q.len(), ctx.degree), v) {
+				if let Ok(mut coefficients) = Array2::from_shape_vec((ctx.q.len(), ctx.degree), v) {
+					izip!(coefficients.outer_iter_mut(), ctx.ops.iter()).for_each(
+						|(mut coeffs, nttop)| nttop.forward(coeffs.as_slice_mut().unwrap()),
+					);
+
 					Ok(Self {
 						ctx: ctx.clone(),
 						representation: repr.unwrap(),
@@ -73,7 +89,11 @@ impl TryConvertFrom<Vec<u64>> for Poly {
 				}
 			}
 			Some(Representation::NttShoup) => {
-				if let Ok(coefficients) = Array2::from_shape_vec((ctx.q.len(), ctx.degree), v) {
+				if let Ok(mut coefficients) = Array2::from_shape_vec((ctx.q.len(), ctx.degree), v) {
+					izip!(coefficients.outer_iter_mut(), ctx.ops.iter()).for_each(
+						|(mut coeffs, nttop)| nttop.forward(coeffs.as_slice_mut().unwrap()),
+					);
+
 					let mut p = Self {
 						ctx: ctx.clone(),
 						representation: repr.unwrap(),

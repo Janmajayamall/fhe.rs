@@ -244,14 +244,22 @@ impl BfvTryConvertFrom<&KeySwitchingKeyProto> for KeySwitchingKey {
 			value
 				.c1
 				.iter()
-				.map(|c1i| Poly::from_bytes(c1i, ctx_ksk).map_err(Error::MathError))
+				.map(|c1i| {
+					let mut p = Poly::from_bytes(c1i, ctx_ksk).map_err(Error::MathError)?;
+					p.change_representation(Representation::NttShoup);
+					Ok(p)
+				})
 				.collect::<Result<Vec<Poly>>>()?
 		};
 
 		let c0 = value
 			.c0
 			.iter()
-			.map(|c0i| Poly::from_bytes(c0i, ctx_ksk).map_err(Error::MathError))
+			.map(|c0i| {
+				let mut p = Poly::from_bytes(c0i, ctx_ksk).map_err(Error::MathError)?;
+				p.change_representation(Representation::NttShoup);
+				Ok(p)
+			})
 			.collect::<Result<Vec<Poly>>>()?;
 
 		Ok(Self {

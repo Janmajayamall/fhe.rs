@@ -16,7 +16,10 @@ pub use ops::dot_product;
 use sha2::{Digest, Sha256};
 
 use self::{scaler::Scaler, switcher::Switcher, traits::TryConvertFrom};
-use crate::{zq::Modulus, Error, Result};
+use crate::{
+	zq::{ntt, Modulus},
+	Error, Result,
+};
 use fhe_util::sample_vec_cbd;
 use itertools::{izip, Itertools};
 use ndarray::{s, Array2, ArrayView2, Axis};
@@ -250,11 +253,18 @@ impl Poly {
 		hasher.update(seed);
 		let mut prng =
 			ChaCha8Rng::from_seed(<ChaCha8Rng as SeedableRng>::Seed::from(hasher.finalize()));
-		let mut p = Poly::zero(ctx, representation);
-		izip!(p.coefficients.outer_iter_mut(), ctx.q.iter()).for_each(|(mut v, qi)| {
-			v.as_slice_mut()
-				.unwrap()
-				.copy_from_slice(&qi.random_vec(ctx.degree, &mut prng))
+		let mut p = Poly::zero(ctx, representation.clone());
+		izip!(
+			p.coefficients.outer_iter_mut(),
+			ctx.q.iter(),
+			ctx.ops.iter()
+		)
+		.for_each(|(mut v, qi, nttop)| {
+			let mut values = qi.random_vec(ctx.degree, &mut prng);
+			if representation != Representation::PowerBasis {
+				nttop.forward(&mut values);
+			}
+			v.as_slice_mut().unwrap().copy_from_slice(&values);
 		});
 		if p.representation == Representation::NttShoup {
 			p.compute_coefficients_shoup()

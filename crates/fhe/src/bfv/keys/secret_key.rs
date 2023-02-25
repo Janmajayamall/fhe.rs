@@ -218,8 +218,8 @@ impl FheDecrypter<Plaintext, Ciphertext> for SecretKey {
 #[cfg(test)]
 mod tests {
 	use super::SecretKey;
-	use crate::bfv::{parameters::BfvParameters, Encoding, Plaintext};
-	use fhe_traits::{FheDecrypter, FheEncoder, FheEncrypter};
+	use crate::bfv::{parameters::BfvParameters, Ciphertext, Encoding, Plaintext};
+	use fhe_traits::{FheDecrypter, FheEncoder, FheEncrypter, Serialize};
 	use rand::thread_rng;
 	use std::{error::Error, sync::Arc};
 
@@ -260,6 +260,24 @@ mod tests {
 				}
 			}
 		}
+
+		Ok(())
+	}
+
+	#[test]
+	fn trial() -> Result<(), Box<dyn Error>> {
+		let mut rng = thread_rng();
+		let params = Arc::new(BfvParameters::default(1, 8));
+		let sk = SecretKey::random(&params, &mut rng);
+		let pt = Plaintext::try_encode(
+			&params.plaintext.random_vec(params.degree(), &mut rng),
+			Encoding::simd(),
+			&params,
+		)?;
+		let ct: Ciphertext = sk.try_encrypt(&pt, &mut rng)?;
+		let bytes = ct.to_bytes();
+		println!("{:?}", sk.coeffs);
+		println!("{bytes:?}");
 
 		Ok(())
 	}

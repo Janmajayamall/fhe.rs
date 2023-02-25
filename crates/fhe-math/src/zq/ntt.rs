@@ -120,7 +120,7 @@ impl NttOperator {
 
 	/// Compute the forward NTT in place.
 	/// Aborts if a is not of the size handled by the operator.
-	#[cfg(not(target_arch = "x86_64"))]
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub fn forward(&self, a: &mut [u64]) {
 		debug_assert_eq!(a.len(), self.size);
 
@@ -167,7 +167,7 @@ impl NttOperator {
 
 	/// Compute the backward NTT in place.
 	/// Aborts if a is not of the size handled by the operator.
-	#[cfg(not(target_arch = "x86_64"))]
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub fn backward(&self, a: &mut [u64]) {
 		debug_assert_eq!(a.len(), self.size);
 
@@ -221,7 +221,7 @@ impl NttOperator {
 	/// This function assumes that a_ptr points to at least `size` elements.
 	/// This function is not constant time and its timing may reveal information
 	/// about the value being reduced.
-	#[cfg(not(target_arch = "x86_64"))]
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn forward_vt_lazy(&self, a: &mut [u64]) {
 		let a_ptr = a.as_mut_ptr();
 
@@ -267,7 +267,7 @@ impl NttOperator {
 	/// This function assumes that a_ptr points to at least `size` elements.
 	/// This function is not constant time and its timing may reveal information
 	/// about the value being reduced.
-	#[cfg(not(target_arch = "x86_64"))]
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn forward_vt(&self, a: &mut [u64]) {
 		self.forward_vt_lazy(a);
 		let a_ptr = a.as_mut_ptr();
@@ -282,7 +282,7 @@ impl NttOperator {
 	/// This function assumes that a_ptr points to at least `size` elements.
 	/// This function is not constant time and its timing may reveal information
 	/// about the value being reduced.
-	#[cfg(not(target_arch = "x86_64"))]
+	// #[cfg(not(target_arch = "x86_64"))]
 	pub unsafe fn backward_vt(&self, a: &mut [u64]) {
 		let a_ptr = a.as_mut_ptr();
 
@@ -442,30 +442,30 @@ impl NttOperator {
 		(p.pow(a, n as u64) == 1) && (p.pow(a, (n / 2) as u64) != 1)
 	}
 
-	#[cfg(target_arch = "x86_64")]
-	pub fn forward(&self, a: &mut [u64]) {
-		self.ntt_hexl.forward(a, 1, 1);
-	}
+	// #[cfg(target_arch = "x86_64")]
+	// pub fn forward(&self, a: &mut [u64]) {
+	// 	self.ntt_hexl.forward(a, 1, 1);
+	// }
 
-	#[cfg(target_arch = "x86_64")]
-	pub fn backward(&self, a: &mut [u64]) {
-		self.ntt_hexl.backward(a, 1, 1);
-	}
+	// #[cfg(target_arch = "x86_64")]
+	// pub fn backward(&self, a: &mut [u64]) {
+	// 	self.ntt_hexl.backward(a, 1, 1);
+	// }
 
-	#[cfg(target_arch = "x86_64")]
-	pub fn forward_vt_lazy(&self, a: &mut [u64]) {
-		self.ntt_hexl.forward(a, 1, 4);
-	}
+	// #[cfg(target_arch = "x86_64")]
+	// pub fn forward_vt_lazy(&self, a: &mut [u64]) {
+	// 	self.ntt_hexl.forward(a, 1, 4);
+	// }
 
-	#[cfg(target_arch = "x86_64")]
-	pub fn forward_vt(&self, a: &mut [u64]) {
-		self.ntt_hexl.forward(a, 1, 1);
-	}
+	// #[cfg(target_arch = "x86_64")]
+	// pub fn forward_vt(&self, a: &mut [u64]) {
+	// 	self.ntt_hexl.forward(a, 1, 1);
+	// }
 
-	#[cfg(target_arch = "x86_64")]
-	pub fn backward_vt(&self, a: &mut [u64]) {
-		self.ntt_hexl.backward(a, 1, 1);
-	}
+	// #[cfg(target_arch = "x86_64")]
+	// pub fn backward_vt(&self, a: &mut [u64]) {
+	// 	self.ntt_hexl.backward(a, 1, 1);
+	// }
 }
 
 #[cfg(test)]

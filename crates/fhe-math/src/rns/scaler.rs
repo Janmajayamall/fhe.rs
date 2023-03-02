@@ -332,7 +332,10 @@ impl RnsScaler {
 			}
 		}
 
+		// let now = std::time::Instant::now();
+
 		unsafe {
+			// dbg!(rests.len(), out.len());
 			for i in 0..out.len() {
 				debug_assert!(starting_index + i < self.to.moduli.len());
 				debug_assert!(starting_index + i < self.omega.len());
@@ -346,9 +349,7 @@ impl RnsScaler {
 				let gamma_i = self.gamma.get_unchecked(starting_index + i);
 				let gamma_shoup_i = self.gamma_shoup.get_unchecked(starting_index + i);
 
-				let mut yi = (qi.modulus() * 2
-					- qi.lazy_mul_shoup(qi.reduce_u128(v), *gamma_i, *gamma_shoup_i))
-					as u128;
+				let mut yi = (qi.modulus() * 2 - qi.mul(qi.reduce_u128(v), *gamma_i)) as u128;
 
 				if !self.scaling_factor.is_one {
 					let wi = qi.lazy_reduce_u128(w);
@@ -358,16 +359,13 @@ impl RnsScaler {
 				debug_assert!(rests.len() <= omega_i.len());
 				debug_assert!(rests.len() <= omega_shoup_i.len());
 				for j in 0..rests.len() {
-					yi += qi.lazy_mul_shoup(
-						*rests.get(j).unwrap(),
-						*omega_i.get_unchecked(j),
-						*omega_shoup_i.get_unchecked(j),
-					) as u128;
+					yi += qi.mul(*rests.get(j).unwrap(), *omega_i.get_unchecked(j)) as u128;
 				}
 
 				*out_i = qi.reduce_u128(yi)
 			}
 		}
+		// println!("inner time: {:?}", now.elapsed());
 	}
 }
 

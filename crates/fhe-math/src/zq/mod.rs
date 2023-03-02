@@ -15,7 +15,7 @@ use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
 /// Structure encapsulating an integer modulus up to 62 bits.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Modulus {
-	p: u64,
+	pub p: u64,
 	nbits: usize,
 	barrett_hi: u64,
 	barrett_lo: u64,

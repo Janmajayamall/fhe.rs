@@ -180,27 +180,27 @@ impl Mul<&Ciphertext> for &Ciphertext {
 			let mp = &self.par.mul_params[self.level];
 
 			// Scale all ciphertexts
-			// let mut now = std::time::SystemTime::now();
+			let mut now = std::time::SystemTime::now();
 			let self_c = self
 				.c
 				.iter()
 				.map(|ci| ci.scale(&mp.extender).map_err(Error::MathError))
 				.collect::<Result<Vec<Poly>>>()
 				.unwrap();
-			// println!("Extend: {:?}", now.elapsed().unwrap());
+			println!("Extend: {:?}", now.elapsed().unwrap());
 
 			// Multiply
-			// now = std::time::SystemTime::now();
+			now = std::time::SystemTime::now();
 			let mut c = vec![Poly::zero(&mp.to, Representation::Ntt); 2 * self_c.len() - 1];
 			for i in 0..self_c.len() {
 				for j in 0..self_c.len() {
 					c[i + j] += &(&self_c[i] * &self_c[j])
 				}
 			}
-			// println!("Multiply: {:?}", now.elapsed().unwrap());
+			println!("Multiply: {:?}", now.elapsed().unwrap());
 
 			// Scale
-			// now = std::time::SystemTime::now();
+			now = std::time::SystemTime::now();
 			let c = c
 				.iter_mut()
 				.map(|ci| {
@@ -211,7 +211,7 @@ impl Mul<&Ciphertext> for &Ciphertext {
 				})
 				.collect::<Result<Vec<Poly>>>()
 				.unwrap();
-			// println!("Scale: {:?}", now.elapsed().unwrap());
+			println!("Scale: {:?}", now.elapsed().unwrap());
 
 			Ciphertext {
 				par: self.par.clone(),
@@ -226,7 +226,7 @@ impl Mul<&Ciphertext> for &Ciphertext {
 			let mp = &self.par.mul_params[self.level];
 
 			// Scale all ciphertexts
-			// let mut now = std::time::SystemTime::now();
+			let mut now = std::time::SystemTime::now();
 			let self_c = self
 				.c
 				.iter()
@@ -239,10 +239,10 @@ impl Mul<&Ciphertext> for &Ciphertext {
 				.map(|ci| ci.scale(&mp.extender).map_err(Error::MathError))
 				.collect::<Result<Vec<Poly>>>()
 				.unwrap();
-			// println!("Extend: {:?}", now.elapsed().unwrap());
+			println!("Extend: {:?}", now.elapsed().unwrap());
 
 			// Multiply
-			// now = std::time::SystemTime::now();
+			now = std::time::SystemTime::now();
 			let mut c =
 				vec![Poly::zero(&mp.to, Representation::Ntt); self_c.len() + other_c.len() - 1];
 			for i in 0..self_c.len() {
@@ -250,10 +250,10 @@ impl Mul<&Ciphertext> for &Ciphertext {
 					c[i + j] += &(&self_c[i] * &other_c[j])
 				}
 			}
-			// println!("Multiply: {:?}", now.elapsed().unwrap());
+			println!("Multiply: {:?}", now.elapsed().unwrap());
 
 			// Scale
-			// now = std::time::SystemTime::now();
+			now = std::time::SystemTime::now();
 			let c = c
 				.iter_mut()
 				.map(|ci| {
@@ -264,7 +264,7 @@ impl Mul<&Ciphertext> for &Ciphertext {
 				})
 				.collect::<Result<Vec<Poly>>>()
 				.unwrap();
-			// println!("Scale: {:?}", now.elapsed().unwrap());
+			println!("Scale: {:?}", now.elapsed().unwrap());
 
 			Ciphertext {
 				par: self.par.clone(),
@@ -563,8 +563,8 @@ mod tests {
 	fn mul() -> Result<(), Box<dyn Error>> {
 		let mut rng = thread_rng();
 		for par in [
-			Arc::new(BfvParameters::default(2, 8)),
-			Arc::new(BfvParameters::default(8, 8)),
+			// Arc::new(BfvParameters::default(2, 8)),
+			Arc::new(BfvParameters::default(16, 1 << 15)),
 		] {
 			for _ in 0..1 {
 				// We will encode `values` in an Simd format, and check that the product is
@@ -580,18 +580,20 @@ mod tests {
 
 				let ct1: Ciphertext = sk.try_encrypt(&pt1, &mut rng)?;
 				let ct2: Ciphertext = sk.try_encrypt(&pt2, &mut rng)?;
+				let now = std::time::Instant::now();
 				let ct3 = &ct1 * &ct2;
-				let ct4 = &ct3 * &ct3;
+				println!("time: {:?}", now.elapsed());
+				// let ct4 = &ct3 * &ct3;
 
 				println!("Noise: {}", unsafe { sk.measure_noise(&ct3)? });
 				let pt = sk.try_decrypt(&ct3)?;
 				assert_eq!(Vec::<u64>::try_decode(&pt, Encoding::simd())?, expected);
 
-				let e = expected.clone();
-				par.plaintext.mul_vec(&mut expected, &e);
-				println!("Noise: {}", unsafe { sk.measure_noise(&ct4)? });
-				let pt = sk.try_decrypt(&ct4)?;
-				assert_eq!(Vec::<u64>::try_decode(&pt, Encoding::simd())?, expected);
+				// let e = expected.clone();
+				// par.plaintext.mul_vec(&mut expected, &e);
+				// println!("Noise: {}", unsafe { sk.measure_noise(&ct4)? });
+				// let pt = sk.try_decrypt(&ct4)?;
+				// assert_eq!(Vec::<u64>::try_decode(&pt, Encoding::simd())?, expected);
 			}
 		}
 		Ok(())

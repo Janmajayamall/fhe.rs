@@ -22,6 +22,32 @@ pub fn supports_opt(p: u64) -> bool {
 	left_side < middle
 }
 
+pub fn generate_moduli(moduli_sizes: usize, count: usize, degree: usize) -> Vec<u64> {
+	let moduli_sizes = vec![moduli_sizes; count];
+	let mut moduli = vec![];
+	for size in moduli_sizes {
+		if size > 62 || size < 10 {
+			panic!();
+		}
+
+		let mut upper_bound = 1 << size;
+		loop {
+			if let Some(prime) = generate_prime(size, 2 * degree as u64, upper_bound) {
+				if !moduli.contains(&prime) {
+					moduli.push(prime);
+					break;
+				} else {
+					upper_bound = prime;
+				}
+			} else {
+				panic!();
+			}
+		}
+	}
+
+	moduli
+}
+
 /// Generate a `num_bits`-bit prime, congruent to 1 mod `modulo`, strictly
 /// smaller than `upper_bound`. Note that `num_bits` must belong to (10..=62),
 /// and upper_bound must be <= 1 << num_bits.

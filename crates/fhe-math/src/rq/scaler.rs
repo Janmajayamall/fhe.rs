@@ -78,7 +78,7 @@ impl Scaler {
 					)
 					.for_each(|(new_column, column)| {
 						self.scaler
-							.scale(column, new_column, self.number_common_moduli)
+							.scale(column, new_column, self.number_common_moduli);
 					});
 				} else if self.number_common_moduli < self.to.q.len() {
 					let mut p_coefficients_powerbasis = p.coefficients.clone();
@@ -137,7 +137,10 @@ impl Scaler {
 #[cfg(test)]
 mod tests {
 	use super::{Scaler, ScalingFactor};
-	use crate::rq::{Context, Poly, Representation};
+	use crate::{
+		rq::{Context, Poly, Representation},
+		zq::primes::{generate_moduli, generate_prime},
+	};
 	use core::time;
 	use itertools::Itertools;
 	use num_bigint::BigUint;
@@ -252,6 +255,28 @@ mod tests {
 
 		let mut rng = thread_rng();
 		let mut poly_q = Poly::random(&from, Representation::PowerBasis, &mut rng);
+
+		let now = std::time::Instant::now();
+		scaler.scale(&poly_q);
+		println!("time: {:?}", now.elapsed());
+	}
+
+	#[test]
+	fn cmp_scale_and_round() {
+		let primes = generate_moduli(60, 32, 1 << 15);
+		let from = Arc::new(Context::new(&primes[..primes.len() / 2], 1 << 15).unwrap());
+		let to = Arc::new(Context::new(&primes[primes.len() / 2..], 1 << 15).unwrap());
+		let pq = Arc::new(Context::new(&primes, 1 << 15).unwrap());
+
+		let scaler = Scaler::new(
+			&pq,
+			&to,
+			ScalingFactor::new(&BigUint::from(65537u64), from.modulus()),
+		)
+		.unwrap();
+
+		let mut rng = thread_rng();
+		let mut poly_q = Poly::random(&pq, Representation::PowerBasis, &mut rng);
 
 		let now = std::time::Instant::now();
 		scaler.scale(&poly_q);

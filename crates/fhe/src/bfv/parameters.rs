@@ -210,8 +210,8 @@ impl BfvParameters {
 		}
 		BfvParametersBuilder::new()
 			.set_degree(degree)
-			.set_plaintext_modulus(1153)
-			.set_moduli_sizes(&vec![62usize; num_moduli])
+			.set_plaintext_modulus(65537)
+			.set_moduli_sizes(&vec![60usize; num_moduli])
 			.build()
 			.unwrap()
 	}

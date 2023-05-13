@@ -177,47 +177,52 @@ impl Multiplicator {
 			));
 		}
 
+		let mut now = std::time::Instant::now();
 		// Extend
 		let c00 = lhs.c[0].scale(&self.extender_lhs)?;
 		let c01 = lhs.c[1].scale(&self.extender_lhs)?;
 		let c10 = rhs.c[0].scale(&self.extender_rhs)?;
 		let c11 = rhs.c[1].scale(&self.extender_rhs)?;
+		println!("Extend: {:?}", now.elapsed());
 
 		// Multiply
+		now = std::time::Instant::now();
 		let mut c0 = &c00 * &c10;
 		let mut c1 = &c00 * &c11;
 		c1 += &(&c01 * &c10);
 		let mut c2 = &c01 * &c11;
+		println!("Tensor: {:?}", now.elapsed());
+
+		// Scale
+		now = std::time::Instant::now();
 		c0.change_representation(Representation::PowerBasis);
 		c1.change_representation(Representation::PowerBasis);
 		c2.change_representation(Representation::PowerBasis);
-
-		// Scale
 		let c0 = c0.scale(&self.down_scaler)?;
 		let c1 = c1.scale(&self.down_scaler)?;
 		let c2 = c2.scale(&self.down_scaler)?;
 
 		let mut c = vec![c0, c1, c2];
 
-		// Relinearize
-		if let Some(rk) = self.rk.as_ref() {
-			#[allow(unused_mut)]
-			let (mut c0r, mut c1r) = rk.relinearizes_poly(&c[2])?;
+		// // Relinearize
+		// if let Some(rk) = self.rk.as_ref() {
+		// 	#[allow(unused_mut)]
+		// 	let (mut c0r, mut c1r) = rk.relinearizes_poly(&c[2])?;
 
-			if c0r.ctx() != c[0].ctx() {
-				c0r.change_representation(Representation::PowerBasis);
-				c1r.change_representation(Representation::PowerBasis);
-				c0r.mod_switch_down_to(c[0].ctx())?;
-				c1r.mod_switch_down_to(c[1].ctx())?;
-			} else {
-				c[0].change_representation(Representation::Ntt);
-				c[1].change_representation(Representation::Ntt);
-			}
+		// 	if c0r.ctx() != c[0].ctx() {
+		// 		c0r.change_representation(Representation::PowerBasis);
+		// 		c1r.change_representation(Representation::PowerBasis);
+		// 		c0r.mod_switch_down_to(c[0].ctx())?;
+		// 		c1r.mod_switch_down_to(c[1].ctx())?;
+		// 	} else {
+		// 		c[0].change_representation(Representation::Ntt);
+		// 		c[1].change_representation(Representation::Ntt);
+		// 	}
 
-			c[0] += &c0r;
-			c[1] += &c1r;
-			c.truncate(2);
-		}
+		// 	c[0] += &c0r;
+		// 	c[1] += &c1r;
+		// 	c.truncate(2);
+		// }
 
 		// We construct a ciphertext, but it may not have the right representation for
 		// the polynomials yet.
@@ -234,6 +239,7 @@ impl Multiplicator {
 			c.c.iter_mut()
 				.for_each(|p| p.change_representation(Representation::Ntt));
 		}
+		println!("Scale: {:?}", now.elapsed());
 
 		Ok(c)
 	}
@@ -406,6 +412,69 @@ mod tests {
 			assert_eq!(Vec::<u64>::try_decode(&pt, Encoding::simd())?, expected);
 		}
 
+		Ok(())
+	}
+
+	#[test]
+	fn compare1() -> Result<(), Box<dyn Error>> {
+		let mut rng = thread_rng();
+		let par = Arc::new(BfvParameters::default(15, 1 << 15));
+		let values = par.plaintext.random_vec(par.degree(), &mut rng);
+
+		let sk = SecretKey::random(&par, &mut OsRng);
+		let rk = RelinearizationKey::new(&sk, &mut rng)?;
+		let pt = Plaintext::try_encode(&values, Encoding::simd(), &par)?;
+		let ct1: Ciphertext = sk.try_encrypt(&pt, &mut rng)?;
+		let ct2: Ciphertext = sk.try_encrypt(&pt, &mut rng)?;
+		dbg!(ct1.c[0].representation());
+		let mut multiplicator = Multiplicator::default(&rk)?;
+		multiplicator.rk = None;
+
+		let now = std::time::Instant::now();
+		let ct3 = multiplicator.multiply(&ct1, &ct2)?;
+		print!("time: {:?}", now.elapsed());
+		println!("Noise: {}", unsafe { sk.measure_noise(&ct3)? });
+		dbg!(ct3.c[0].representation());
+		Ok(())
+	}
+
+	#[test]
+	fn compare2() -> Result<(), Box<dyn Error>> {
+		let par = Arc::new(BfvParameters::default(3, 1 << 15));
+		let mut rng = thread_rng();
+		let mut extended_basis = par.moduli().to_vec();
+		extended_basis
+			.push(generate_prime(62, 2 * par.degree() as u64, extended_basis[2]).unwrap());
+		extended_basis
+			.push(generate_prime(62, 2 * par.degree() as u64, extended_basis[3]).unwrap());
+		extended_basis
+			.push(generate_prime(62, 2 * par.degree() as u64, extended_basis[4]).unwrap());
+		let rns = RnsContext::new(&extended_basis[3..])?;
+
+		let values = par.plaintext.random_vec(par.degree(), &mut rng);
+		let mut expected = values.clone();
+		par.plaintext.mul_vec(&mut expected, &values);
+
+		let sk = SecretKey::random(&par, &mut OsRng);
+		let pt = Plaintext::try_encode(&values, Encoding::simd(), &par)?;
+		let ct1 = sk.try_encrypt(&pt, &mut rng)?;
+		let ct2 = sk.try_encrypt(&pt, &mut rng)?;
+
+		let mut multiplicator = Multiplicator::new(
+			ScalingFactor::one(),
+			ScalingFactor::new(rns.modulus(), par.ctx[0].modulus()),
+			&extended_basis,
+			ScalingFactor::new(&BigUint::from(par.plaintext()), rns.modulus()),
+			&par,
+		)?;
+		// multiplicator.rk = None;
+		dbg!(&multiplicator.rk);
+		dbg!(&multiplicator.mod_switch);
+
+		let now = std::time::Instant::now();
+		let ct3 = multiplicator.multiply(&ct1, &ct2)?;
+		print!("time: {:?}", now.elapsed());
+		println!("Noise: {}", unsafe { sk.measure_noise(&ct3)? });
 		Ok(())
 	}
 }

@@ -4,6 +4,7 @@ use super::Modulus;
 use fhe_util::is_prime;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use traits::Ntt;
 
 /// Returns whether a modulus p is prime and supports the Number Theoretic
 /// Transform of size n.
@@ -13,6 +14,188 @@ pub fn supports_ntt(p: u64, n: usize) -> bool {
 	assert!(n >= 8 && n.is_power_of_two());
 
 	p % ((n as u64) << 1) == 1 && is_prime(p)
+}
+
+impl Ntt for NttOperator {
+	fn new(degree: usize, prime: u64) -> Self {
+		assert!(supports_ntt(prime, degree));
+
+		let p = Modulus::new(prime).unwrap();
+		let omega = Self::primitive_root(degree, &p);
+		let omega_inv = p.inv(omega).unwrap();
+
+		let mut exp = 1u64;
+		let mut exp_inv = 1u64;
+		let mut powers = Vec::with_capacity(degree + 1);
+		let mut powers_inv = Vec::with_capacity(degree + 1);
+		for _ in 0..degree + 1 {
+			powers.push(exp);
+			powers_inv.push(exp_inv);
+			exp = p.mul(exp, omega);
+			exp_inv = p.mul(exp_inv, omega_inv);
+		}
+
+		let mut omegas = Vec::with_capacity(degree);
+		let mut omegas_inv = Vec::with_capacity(degree);
+		let mut zetas_inv = Vec::with_capacity(degree);
+		for i in 0..degree {
+			let j = i.reverse_bits() >> (degree.leading_zeros() + 1);
+			omegas.push(powers[j]);
+			omegas_inv.push(powers_inv[j]);
+			zetas_inv.push(powers_inv[j + 1]);
+		}
+
+		let size_inv = p.inv(degree as u64).unwrap();
+
+		let omegas_shoup = p.shoup_vec(&omegas);
+		let zetas_inv_shoup = p.shoup_vec(&zetas_inv);
+
+		Self {
+			p: p.clone(),
+			p_twice: p.p * 2,
+			size: degree,
+			omegas: omegas.into_boxed_slice(),
+			omegas_shoup: omegas_shoup.into_boxed_slice(),
+			omegas_inv: omegas_inv.into_boxed_slice(),
+			zetas_inv: zetas_inv.into_boxed_slice(),
+			zetas_inv_shoup: zetas_inv_shoup.into_boxed_slice(),
+			size_inv,
+			size_inv_shoup: p.shoup(size_inv),
+		}
+	}
+
+	/// Compute the forward NTT in place.
+	/// Aborts if a is not of the size handled by the operator.
+	fn forward(&self, a: &mut [u64]) {
+		debug_assert_eq!(a.len(), self.size);
+
+		let n = self.size;
+		let a_ptr = a.as_mut_ptr();
+
+		let mut l = n >> 1;
+		let mut m = 1;
+		let mut k = 1;
+		while l > 0 {
+			for i in 0..m {
+				unsafe {
+					let omega = *self.omegas.get_unchecked(k);
+					let omega_shoup = *self.omegas_shoup.get_unchecked(k);
+					k += 1;
+
+					let s = 2 * i * l;
+					match l {
+						1 => {
+							// The last level should reduce the output
+							let uj = &mut *a_ptr.add(s);
+							let ujl = &mut *a_ptr.add(s + l);
+							self.butterfly(uj, ujl, omega, omega_shoup);
+							*uj = self.reduce3(*uj);
+							*ujl = self.reduce3(*ujl);
+						}
+						_ => {
+							for j in s..(s + l) {
+								self.butterfly(
+									&mut *a_ptr.add(j),
+									&mut *a_ptr.add(j + l),
+									omega,
+									omega_shoup,
+								);
+							}
+						}
+					}
+				}
+			}
+			l >>= 1;
+			m <<= 1;
+		}
+	}
+
+	/// Compute the backward NTT in place.
+	/// Aborts if a is not of the size handled by the operator.
+	fn backward(&self, a: &mut [u64]) {
+		debug_assert_eq!(a.len(), self.size);
+
+		let a_ptr = a.as_mut_ptr();
+
+		let mut k = 0;
+		let mut m = self.size >> 1;
+		let mut l = 1;
+		while m > 0 {
+			for i in 0..m {
+				let s = 2 * i * l;
+				unsafe {
+					let zeta_inv = *self.zetas_inv.get_unchecked(k);
+					let zeta_inv_shoup = *self.zetas_inv_shoup.get_unchecked(k);
+					k += 1;
+					match l {
+						1 => {
+							self.inv_butterfly(
+								&mut *a_ptr.add(s),
+								&mut *a_ptr.add(s + l),
+								zeta_inv,
+								zeta_inv_shoup,
+							);
+						}
+						_ => {
+							for j in s..(s + l) {
+								self.inv_butterfly(
+									&mut *a_ptr.add(j),
+									&mut *a_ptr.add(j + l),
+									zeta_inv,
+									zeta_inv_shoup,
+								);
+							}
+						}
+					}
+				}
+			}
+			l <<= 1;
+			m >>= 1;
+		}
+
+		a.iter_mut()
+			.for_each(|ai| *ai = self.p.mul_shoup(*ai, self.size_inv, self.size_inv_shoup));
+	}
+
+	fn forward_lazy(&self, a: &mut [u64]) {
+		let a_ptr = a.as_mut_ptr();
+		let mut l = self.size >> 1;
+		let mut m = 1;
+		let mut k = 1;
+		unsafe {
+			while l > 0 {
+				for i in 0..m {
+					let omega = *self.omegas.get_unchecked(k);
+					let omega_shoup = *self.omegas_shoup.get_unchecked(k);
+					k += 1;
+
+					let s = 2 * i * l;
+					match l {
+						1 => {
+							self.butterfly_vt(
+								&mut *a_ptr.add(s),
+								&mut *a_ptr.add(s + l),
+								omega,
+								omega_shoup,
+							);
+						}
+						_ => {
+							for j in s..(s + l) {
+								self.butterfly_vt(
+									&mut *a_ptr.add(j),
+									&mut *a_ptr.add(j + l),
+									omega,
+									omega_shoup,
+								);
+							}
+						}
+					}
+				}
+				l >>= 1;
+				m <<= 1;
+			}
+		}
+	}
 }
 
 /// Number-Theoretic Transform operator.

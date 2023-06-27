@@ -990,7 +990,7 @@ dependencies = [
 [[package]]
 name = "traits"
 version = "0.1.0"
-source = "git+https://github.com/Janmajayamall/bfv?branch=ntt-trait#b1f7b3af7b69ad3a68db0300c69b102f658c7570"
+source = "git+https://github.com/Janmajayamall/bfv?branch=dev#b23e0698f545afbe3f22e0aeafcd84a6ca88cd00"
 
 [[package]]
 name = "typenum"

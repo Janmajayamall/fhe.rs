@@ -198,4 +198,27 @@ mod tests {
 		}
 		Ok(())
 	}
+
+	#[test]
+	fn gk_noise_growth() -> Result<(), Box<dyn Error>> {
+		let params = Arc::new(BfvParameters::default(6, 1 << 15));
+		let mut rng = thread_rng();
+		let sk = SecretKey::random(&params, &mut rng);
+		let v = params.plaintext.random_vec(params.degree(), &mut rng);
+		let pt = Plaintext::try_encode(&v, Encoding::simd(), &params)?;
+		let ct = sk.try_encrypt(&pt, &mut rng)?;
+
+		let gk = GaloisKey::new(&sk, 3, 0, 0, &mut rng)?;
+		let mut ct2 = gk.relinearize(&ct)?;
+
+		// for _ in 0..1000 {
+		// 	ct2 = gk.relinearize(&ct2)?;
+		// }
+
+		unsafe {
+			dbg!(sk.measure_noise(&ct2));
+		}
+
+		Ok(())
+	}
 }
